@@ -1,0 +1,11 @@
+; Engine configuration file.
+; Minimal project marker so Godot 4.x recognises this folder as a project.
+; Open in Godot and configure the rest (autoloads, input map, display) via the editor.
+
+config_version=5
+
+[application]
+
+config/name="VOIDLIGHT"
+config/description="You can only see as far as your light allows. But they can hear everything."
+config/features=PackedStringArray("4.3", "GL Compatibility")
