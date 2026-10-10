@@ -1,0 +1,95 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/level_manager.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/world/wall.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_walker.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/pickups/ammo_pickup.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/pickups/health_pickup.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="7"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_portal"]
+size = Vector2(36, 48)
+
+[node name="World" type="Node2D"]
+script = ExtResource("1")
+level_bounds = Rect2(0, 0, 960, 640)
+
+[node name="CanvasModulate" type="CanvasModulate" parent="."]
+color = Color(0.035, 0.035, 0.045, 1)
+
+[node name="Floor" type="Polygon2D" parent="."]
+color = Color(0.12, 0.12, 0.14, 1)
+polygon = PackedVector2Array(0, 0, 960, 0, 960, 640, 0, 640)
+
+[node name="WallTop" parent="." instance=ExtResource("2")]
+position = Vector2(480, 10)
+size = Vector2(960, 20)
+
+[node name="WallBottom" parent="." instance=ExtResource("2")]
+position = Vector2(480, 630)
+size = Vector2(960, 20)
+
+[node name="WallLeft" parent="." instance=ExtResource("2")]
+position = Vector2(10, 320)
+size = Vector2(20, 640)
+
+[node name="WallRight" parent="." instance=ExtResource("2")]
+position = Vector2(950, 320)
+size = Vector2(20, 640)
+
+[node name="PillarA" parent="." instance=ExtResource("2")]
+position = Vector2(320, 220)
+size = Vector2(44, 44)
+
+[node name="PillarB" parent="." instance=ExtResource("2")]
+position = Vector2(660, 440)
+size = Vector2(44, 44)
+
+[node name="Player" parent="." instance=ExtResource("3")]
+position = Vector2(100, 320)
+
+[node name="Monsters" type="Node2D" parent="."]
+
+[node name="Walker1" parent="Monsters" instance=ExtResource("4")]
+position = Vector2(420, 150)
+
+[node name="Walker2" parent="Monsters" instance=ExtResource("4")]
+position = Vector2(620, 520)
+
+[node name="Walker3" parent="Monsters" instance=ExtResource("4")]
+position = Vector2(260, 480)
+
+[node name="Walker4" parent="Monsters" instance=ExtResource("4")]
+position = Vector2(760, 200)
+
+[node name="Walker5" parent="Monsters" instance=ExtResource("4")]
+position = Vector2(500, 560)
+
+[node name="Pickups" type="Node2D" parent="."]
+
+[node name="AmmoPickup1" parent="Pickups" instance=ExtResource("5")]
+position = Vector2(200, 540)
+
+[node name="AmmoPickup2" parent="Pickups" instance=ExtResource("5")]
+position = Vector2(800, 150)
+
+[node name="HealthPickup1" parent="Pickups" instance=ExtResource("6")]
+position = Vector2(480, 320)
+
+[node name="ExitPortal" type="Area2D" parent="."]
+position = Vector2(900, 320)
+collision_layer = 0
+collision_mask = 2
+monitoring = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ExitPortal"]
+shape = SubResource("RectangleShape2D_portal")
+
+[node name="Visual" type="Polygon2D" parent="ExitPortal"]
+color = Color(0.2, 0.8, 0.9, 0.8)
+polygon = PackedVector2Array(-18, -24, 18, -24, 18, 24, -18, 24)
+
+[node name="HUD" parent="." instance=ExtResource("7")]
+
+[node name="AmbientDrone" type="AudioStreamPlayer" parent="."]
