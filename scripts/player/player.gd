@@ -6,6 +6,7 @@ extends CharacterBody2D
 signal hp_changed(hp: int)
 signal ammo_changed(ammo: int)
 signal died
+signal light_toggled(on: bool)
 
 @export var speed := 140.0
 @export var sprint_multiplier := 1.6
@@ -18,8 +19,10 @@ signal died
 @onready var gun_point: Marker2D = $GunPoint
 @onready var shoot_audio: AudioStreamPlayer2D = $ShootAudio
 @onready var heartbeat_audio: AudioStreamPlayer = $HeartbeatAudio
+@onready var light_toggle_audio: AudioStreamPlayer2D = $LightToggleAudio
 
 var _noise_radius := 0.0
+var _light_on := true
 
 const _TEX_W := 256
 const _TEX_H := 192
@@ -38,6 +41,8 @@ func _physics_process(_delta: float) -> void:
 	_aim_at_mouse()
 	if Input.is_action_just_pressed("shoot"):
 		_shoot()
+	if Input.is_action_just_pressed("toggle_light"):
+		_toggle_light()
 
 
 func _handle_movement() -> void:
@@ -61,6 +66,21 @@ func _aim_at_mouse() -> void:
 ## Enemies query this to decide whether they heard the player this frame.
 func get_noise_radius() -> float:
 	return _noise_radius
+
+
+## Enemies and the minimap query this: light on means the maze and nearby
+## enemies are visible (to you AND to them), light off means you're blind to
+## both but much harder to notice — sound is still what gives you away.
+func is_light_on() -> bool:
+	return _light_on
+
+
+func _toggle_light() -> void:
+	_light_on = not _light_on
+	flashlight.enabled = _light_on
+	light_toggled.emit(_light_on)
+	if light_toggle_audio and light_toggle_audio.stream:
+		light_toggle_audio.play()
 
 
 func _shoot() -> void:

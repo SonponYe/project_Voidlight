@@ -1,8 +1,14 @@
 extends Node2D
-## Level manager (attached to a level's World root): tracks kill count,
-## unlocks the exit portal when the map is cleared, and loads the next scene.
+## Level manager (attached to a level's World root): tracks kill count and
+## loads the next scene once the player reaches the exit.
+##
+## The goal is traversal, not extermination — enter the maze, get to the far
+## side alive. require_all_kills_to_exit defaults off so the exit is open
+## from the start; flip it per-level (e.g. a boss room) if a level should
+## gate on clearing it instead.
 
 @export var level_bounds := Rect2(Vector2.ZERO, Vector2(1280, 720))
+@export var require_all_kills_to_exit := false
 @export_file("*.tscn") var next_level_path := ""
 @export_file("*.tscn") var win_screen_path := "res://scenes/ui/win_screen.tscn"
 @export_file("*.tscn") var game_over_path := "res://scenes/ui/game_over.tscn"
@@ -36,7 +42,7 @@ func _ready() -> void:
 	hud.minimap.setup(player, monsters, level_bounds)
 
 	exit_portal.body_entered.connect(_on_exit_entered)
-	exit_portal.monitoring = false
+	exit_portal.monitoring = not require_all_kills_to_exit
 
 
 func _process(_delta: float) -> void:
@@ -61,7 +67,7 @@ func _on_enemy_killed(_enemy: Node) -> void:
 	_kills += 1
 	Globals.total_kills += 1
 	hud.on_kill_registered(_kills)
-	if _kills >= _total_monsters:
+	if require_all_kills_to_exit and _kills >= _total_monsters:
 		_unlock_exit()
 
 

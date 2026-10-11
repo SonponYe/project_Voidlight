@@ -38,8 +38,16 @@ func _on_enemy_killed(enemy: Node) -> void:
 
 
 func _process(_delta: float) -> void:
-	if _player and is_instance_valid(_player):
-		player_dot.position = _world_to_local(_player.global_position) - player_dot.size / 2.0
+	if not (_player and is_instance_valid(_player)):
+		return
+
+	# Light off == blind: no maze layout, no enemy positions, nothing.
+	var light_on: bool = _player.is_light_on() if _player.has_method("is_light_on") else true
+	visible = light_on
+	if not light_on:
+		return
+
+	player_dot.position = _world_to_local(_player.global_position) - player_dot.size / 2.0
 	for enemy in _enemy_dots.keys():
 		if is_instance_valid(enemy):
 			_enemy_dots[enemy].position = _world_to_local(enemy.global_position) - dot_size / 2.0

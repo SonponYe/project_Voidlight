@@ -18,7 +18,8 @@ enum State { IDLE, AWARE, HUNT, DEAD }
 @export var sound_radius := 160.0
 @export var flashlight_range := 260.0
 @export var flashlight_half_angle_deg := 35.0
-@export var proximity_hunt_radius := 48.0
+@export var dark_bump_radius := 40.0
+@export var light_on_sense_radius := 150.0
 @export var max_hits := 1
 @export var contact_damage := 1
 @export var contact_cooldown := 1.0
@@ -80,11 +81,24 @@ func _update_footsteps() -> void:
 
 
 # --- Detection ---------------------------------------------------------------
+#
+# Light ON:  the player is lit up and visible — close range omnidirectional
+#            sense, plus the long forward cone (_player_sees_me). Sound
+#            detection also still applies.
+# Light OFF: no visual tells at all except literally bumping into the player
+#            (dark_bump_radius). Sound (movement noise, gunshots) is the only
+#            other way to be noticed — makes going dark genuinely stealthier,
+#            at the cost of the player losing the maze layout/minimap too.
 
 func _update_detection() -> void:
 	var dist := global_position.distance_to(_player.global_position)
+	var light_on: bool = _player.is_light_on() if _player.has_method("is_light_on") else true
 
-	if dist <= proximity_hunt_radius or _player_sees_me(dist):
+	var spotted := dist <= dark_bump_radius
+	if light_on:
+		spotted = spotted or dist <= light_on_sense_radius or _player_sees_me(dist)
+
+	if spotted:
 		_set_state(State.HUNT)
 		return
 
