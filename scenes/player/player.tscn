@@ -27,5 +27,7 @@ position = Vector2(16, 0)
 
 [node name="ShootAudio" type="AudioStreamPlayer2D" parent="."]
 
+[node name="HeartbeatAudio" type="AudioStreamPlayer" parent="."]
+
 [node name="Camera2D" type="Camera2D" parent="."]
 current = true

@@ -37,6 +37,7 @@ var _contact_timer := 0.0
 @onready var hit_area: Area2D = $HitArea
 @onready var footstep_audio: AudioStreamPlayer2D = $FootstepAudio
 @onready var growl_audio: AudioStreamPlayer2D = $GrowlAudio
+@onready var stinger_audio: AudioStreamPlayer2D = $StingerAudio
 
 
 func _ready() -> void:
@@ -145,9 +146,15 @@ func _pick_new_wander_direction() -> void:
 func _set_state(new_state: State) -> void:
 	if state == State.DEAD or state == new_state:
 		return
+	var was_hunting := state == State.HUNT
 	state = new_state
 	if state == State.AWARE:
 		last_known_player_pos = _player.global_position
+	elif state == State.HUNT and not was_hunting:
+		# Jump-scare beat: the one-shot sting of the moment it locks on,
+		# separate from the looping growl that follows while it's chasing.
+		if stinger_audio and stinger_audio.stream:
+			stinger_audio.play()
 
 
 ## Polls overlap instead of relying on the one-shot body_entered signal, so

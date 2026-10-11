@@ -17,6 +17,7 @@ signal died
 @onready var flashlight: PointLight2D = $Flashlight
 @onready var gun_point: Marker2D = $GunPoint
 @onready var shoot_audio: AudioStreamPlayer2D = $ShootAudio
+@onready var heartbeat_audio: AudioStreamPlayer = $HeartbeatAudio
 
 var _noise_radius := 0.0
 
@@ -89,13 +90,27 @@ func add_ammo(amount: int) -> void:
 func heal(amount: int) -> void:
 	Globals.player_hp += amount
 	hp_changed.emit(Globals.player_hp)
+	_update_heartbeat()
 
 
 func take_damage(amount: int = 1) -> void:
 	Globals.player_hp -= amount
 	hp_changed.emit(Globals.player_hp)
+	_update_heartbeat()
 	if Globals.player_hp <= 0:
 		died.emit()
+
+
+## Last-stand tension cue: loops a heartbeat once the player is down to
+## their last hit point, stops as soon as they're healed back up.
+func _update_heartbeat() -> void:
+	if heartbeat_audio == null or heartbeat_audio.stream == null:
+		return
+	var critical := Globals.player_hp == 1
+	if critical and not heartbeat_audio.playing:
+		heartbeat_audio.play()
+	elif not critical and heartbeat_audio.playing:
+		heartbeat_audio.stop()
 
 
 ## Builds a soft-edged cone texture once at startup: RGB white, alpha falloff
