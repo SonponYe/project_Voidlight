@@ -45,5 +45,7 @@ text = "Start"
 [node name="QuitButton" type="Button" parent="VBox"]
 text = "Quit"
 
+[node name="Music" type="AudioStreamPlayer" parent="."]
+
 [connection signal="pressed" from="VBox/StartButton" to="." method="_on_start_pressed"]
 [connection signal="pressed" from="VBox/QuitButton" to="." method="_on_quit_pressed"]

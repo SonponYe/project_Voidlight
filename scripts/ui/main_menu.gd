@@ -4,10 +4,13 @@ extends Control
 @export_file("*.tscn") var first_level_path := "res://scenes/levels/level_1.tscn"
 
 @onready var high_score_label: Label = $VBox/HighScoreLabel
+@onready var music: AudioStreamPlayer = $Music
 
 
 func _ready() -> void:
 	high_score_label.text = "High Score: %d" % Globals.high_score
+	if music.stream:
+		music.play()
 
 
 func _on_start_pressed() -> void:
