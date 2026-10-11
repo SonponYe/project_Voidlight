@@ -42,7 +42,6 @@ var _contact_timer := 0.0
 func _ready() -> void:
 	add_to_group("enemies")
 	_player = get_tree().get_first_node_in_group("player")
-	hit_area.body_entered.connect(_on_hit_area_body_entered)
 	_pick_new_wander_direction()
 
 
@@ -62,6 +61,21 @@ func _physics_process(delta: float) -> void:
 			_process_hunt(delta)
 
 	move_and_slide()
+	_update_footsteps()
+	_update_contact_damage()
+
+
+## AudioStreamPlayer2D attenuates by distance automatically, so once a
+## footstep sound is assigned this alone delivers "volume increases as the
+## monster approaches" — no extra logic needed for that part.
+func _update_footsteps() -> void:
+	if footstep_audio == null or footstep_audio.stream == null:
+		return
+	var moving := velocity.length() > 1.0
+	if moving and not footstep_audio.playing:
+		footstep_audio.play()
+	elif not moving and footstep_audio.playing:
+		footstep_audio.stop()
 
 
 # --- Detection ---------------------------------------------------------------
@@ -136,12 +150,17 @@ func _set_state(new_state: State) -> void:
 		last_known_player_pos = _player.global_position
 
 
-func _on_hit_area_body_entered(body: Node) -> void:
+## Polls overlap instead of relying on the one-shot body_entered signal, so
+## damage still re-applies after the cooldown even if the player and enemy
+## remain pressed together rather than re-entering the area each time.
+func _update_contact_damage() -> void:
 	if state == State.DEAD or _contact_timer > 0.0:
 		return
-	if body.is_in_group("player") and body.has_method("take_damage"):
-		body.take_damage(contact_damage)
-		_contact_timer = contact_cooldown
+	for body in hit_area.get_overlapping_bodies():
+		if body.is_in_group("player") and body.has_method("take_damage"):
+			body.take_damage(contact_damage)
+			_contact_timer = contact_cooldown
+			break
 
 
 func hit(damage: int = 1) -> void:

@@ -28,12 +28,15 @@ func activate(global_pos: Vector2, direction: Vector2, damage: int) -> void:
 	monitorable = true
 
 
+## deactivate() can run from inside this Area2D's own body_entered signal
+## (physics in/out flush), where toggling monitoring/monitorable directly is
+## blocked by the engine — defer them so it's safe from any call site.
 func deactivate() -> void:
 	_active = false
 	visible = false
 	set_physics_process(false)
-	monitoring = false
-	monitorable = false
+	set_deferred("monitoring", false)
+	set_deferred("monitorable", false)
 
 
 func _physics_process(delta: float) -> void:

@@ -66,18 +66,23 @@ func _on_enemy_killed(_enemy: Node) -> void:
 
 
 func _unlock_exit() -> void:
-	exit_portal.monitoring = true
+	exit_portal.set_deferred("monitoring", true)
 
 
+# _on_exit_entered and _on_player_died both run nested inside a physics
+# body_entered callback (exit portal's own, or the enemy HitArea -> player ->
+# died chain). change_scene_to_file() frees the whole current scene tree,
+# including CollisionObject2D nodes, which the engine blocks while still
+# inside that physics in/out flush — so the actual scene change is deferred.
 func _on_exit_entered(body: Node) -> void:
 	if not body.is_in_group("player"):
 		return
 	if next_level_path.is_empty():
-		get_tree().change_scene_to_file(win_screen_path)
+		get_tree().call_deferred("change_scene_to_file", win_screen_path)
 	else:
 		Globals.current_level += 1
-		get_tree().change_scene_to_file(next_level_path)
+		get_tree().call_deferred("change_scene_to_file", next_level_path)
 
 
 func _on_player_died() -> void:
-	get_tree().change_scene_to_file(game_over_path)
+	get_tree().call_deferred("change_scene_to_file", game_over_path)
