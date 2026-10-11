@@ -15,3 +15,6 @@ export/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Raw asset-pack downloads — extract what you need into assets/, don't commit the zip
+*.zip

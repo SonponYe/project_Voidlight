@@ -283,10 +283,10 @@ Track build progress here. Check off as each system is completed.
 
 | Asset | Source | License |
 |---|---|---|
-| Placeholder sprites | [Kenney.nl](https://kenney.nl) | CC0 |
+| Dungeon tiles, characters, items (`assets/sprites/dungeon/`) | [Kenney — Scribble Dungeons](https://kenney.nl/assets/scribble-dungeons) | CC0 |
+| Placeholder sprites (everything not yet reskinned) | [Kenney.nl](https://kenney.nl) | CC0 |
 | Sound effects | [freesound.org](https://freesound.org) | Various (log each file) |
 | Ambient music | TBD | TBD |
-| Tile art | TBD | TBD |
 
 > **Rule:** Every asset used in VOIDLIGHT must be listed here with its license before the game ships. No exceptions.
 
