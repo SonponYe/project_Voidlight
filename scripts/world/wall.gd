@@ -9,6 +9,7 @@ extends StaticBody2D
 		_apply_size()
 
 @onready var visual: Polygon2D = $Visual
+@onready var art: Sprite2D = $Art
 @onready var collision: CollisionShape2D = $CollisionShape2D
 @onready var occluder: LightOccluder2D = $LightOccluder2D
 
@@ -26,6 +27,13 @@ func _apply_size() -> void:
 		Vector2(-half_v.x, -half_v.y), Vector2(half_v.x, -half_v.y),
 		Vector2(half_v.x, half_v.y), Vector2(-half_v.x, half_v.y),
 	])
+
+	# Visual is a flat-color fallback; if real art is assigned (fully opaque,
+	# same footprint) it draws on top and the fallback is never seen.
+	if art.texture:
+		var tex_size := art.texture.get_size()
+		if tex_size.x > 0 and tex_size.y > 0:
+			art.scale = size / tex_size
 
 	var shape := RectangleShape2D.new()
 	shape.size = size
