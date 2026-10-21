@@ -1,7 +1,7 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/level_manager.gd" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/world/wall.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/world/maze.gd" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/enemy_walker.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/pickups/ammo_pickup.tscn" id="5"]
@@ -13,72 +13,50 @@ size = Vector2(36, 48)
 
 [node name="World" type="Node2D"]
 script = ExtResource("1")
-level_bounds = Rect2(0, 0, 960, 640)
+level_bounds = Rect2(0, 0, 960, 704)
 
 [node name="CanvasModulate" type="CanvasModulate" parent="."]
 color = Color(0.035, 0.035, 0.045, 1)
 
-[node name="Floor" type="Polygon2D" parent="."]
-color = Color(0.12, 0.12, 0.14, 1)
-polygon = PackedVector2Array(0, 0, 960, 0, 960, 640, 0, 640)
+[node name="Maze" type="Node2D" parent="."]
+script = ExtResource("2")
+layout = PackedStringArray("###############", "E...#.....#...#", "###.#.###.###.#", "#...#.#.#.....#", "#.###.#.#####.#", "#.#...#.#...#.#", "#.###.#.#.#.#.#", "#.#...#...#...#", "#.#.###.#######", "#...#.........X", "###############")
 
-[node name="WallTop" parent="." instance=ExtResource("2")]
-position = Vector2(480, 10)
-size = Vector2(960, 20)
-
-[node name="WallBottom" parent="." instance=ExtResource("2")]
-position = Vector2(480, 630)
-size = Vector2(960, 20)
-
-[node name="WallLeft" parent="." instance=ExtResource("2")]
-position = Vector2(10, 320)
-size = Vector2(20, 640)
-
-[node name="WallRight" parent="." instance=ExtResource("2")]
-position = Vector2(950, 320)
-size = Vector2(20, 640)
-
-[node name="PillarA" parent="." instance=ExtResource("2")]
-position = Vector2(320, 220)
-size = Vector2(44, 44)
-
-[node name="PillarB" parent="." instance=ExtResource("2")]
-position = Vector2(660, 440)
-size = Vector2(44, 44)
+[node name="NavRegion" type="NavigationRegion2D" parent="."]
 
 [node name="Player" parent="." instance=ExtResource("3")]
-position = Vector2(100, 320)
+position = Vector2(32, 96)
 
 [node name="Monsters" type="Node2D" parent="."]
 
 [node name="Walker1" parent="Monsters" instance=ExtResource("4")]
-position = Vector2(420, 150)
+position = Vector2(224, 224)
 
 [node name="Walker2" parent="Monsters" instance=ExtResource("4")]
-position = Vector2(620, 520)
+position = Vector2(608, 224)
 
 [node name="Walker3" parent="Monsters" instance=ExtResource("4")]
-position = Vector2(260, 480)
+position = Vector2(96, 480)
 
 [node name="Walker4" parent="Monsters" instance=ExtResource("4")]
-position = Vector2(760, 200)
+position = Vector2(608, 480)
 
 [node name="Walker5" parent="Monsters" instance=ExtResource("4")]
-position = Vector2(500, 560)
+position = Vector2(480, 608)
 
 [node name="Pickups" type="Node2D" parent="."]
 
 [node name="AmmoPickup1" parent="Pickups" instance=ExtResource("5")]
-position = Vector2(200, 540)
+position = Vector2(352, 352)
 
 [node name="AmmoPickup2" parent="Pickups" instance=ExtResource("5")]
-position = Vector2(800, 150)
+position = Vector2(736, 352)
 
 [node name="HealthPickup1" parent="Pickups" instance=ExtResource("6")]
-position = Vector2(480, 320)
+position = Vector2(608, 608)
 
 [node name="ExitPortal" type="Area2D" parent="."]
-position = Vector2(900, 320)
+position = Vector2(928, 608)
 collision_layer = 0
 collision_mask = 2
 monitoring = false
