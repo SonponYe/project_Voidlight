@@ -17,6 +17,7 @@ extends Node2D
 @onready var monsters: Node2D = $Monsters
 @onready var hud: CanvasLayer = $HUD
 @onready var exit_portal: Area2D = $ExitPortal
+@onready var nav_region: NavigationRegion2D = $NavRegion
 @onready var ambient_drone: AudioStreamPlayer = get_node_or_null("AmbientDrone")
 
 var _total_monsters := 0
@@ -25,6 +26,7 @@ var _kills := 0
 
 func _ready() -> void:
 	Globals.begin_level()
+	_bake_navigation()
 	_total_monsters = monsters.get_child_count()
 
 	for enemy in monsters.get_children():
@@ -52,6 +54,27 @@ func _process(_delta: float) -> void:
 	if nearest < INF:
 		var t: float = clamp(1.0 - nearest / 600.0, 0.0, 1.0)
 		ambient_drone.pitch_scale = lerp(0.9, 1.4, t)
+
+
+## Bakes the enemy navmesh at load time: level_bounds as the walkable
+## outline, minus every StaticBody2D collider in the "walls" group (every
+## Wall prefab instance self-registers into that group). Synchronous since
+## this is a small, fast bake and enemies need it ready before their first
+## physics frame.
+func _bake_navigation() -> void:
+	var poly := NavigationPolygon.new()
+	poly.add_outline(PackedVector2Array([
+		level_bounds.position,
+		Vector2(level_bounds.end.x, level_bounds.position.y),
+		level_bounds.end,
+		Vector2(level_bounds.position.x, level_bounds.end.y),
+	]))
+	poly.parsed_geometry_type = NavigationPolygon.PARSED_GEOMETRY_STATIC_COLLIDERS
+	poly.parsed_collision_mask = 1
+	poly.source_geometry_mode = NavigationPolygon.SOURCE_GEOMETRY_GROUPS_EXPLICIT
+	poly.source_geometry_group_name = "walls"
+	nav_region.navigation_polygon = poly
+	nav_region.bake_navigation_polygon(false)
 
 
 func _nearest_enemy_distance() -> float:

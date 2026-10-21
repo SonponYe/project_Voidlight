@@ -1,13 +1,15 @@
 extends CharacterBody2D
 class_name Enemy
-## Base enemy: Finite State Machine (IDLE / AWARE / HUNT / DEAD), direct-chase
-## movement, positional audio hooks, and death handling.
-## Walker / Crawler / Lurker extend this and only override what differs.
+## Base enemy: Finite State Machine (IDLE / AWARE / HUNT / DEAD), maze-aware
+## pathfinding via NavigationAgent2D, positional audio hooks, and death
+## handling. Walker / Crawler / Lurker extend this and only override what
+## differs.
 ##
-## Pathfinding note: this MVP steers straight toward its target and relies on
-## CharacterBody2D's wall-sliding to avoid clipping through walls. Swap in a
-## NavigationAgent2D + baked NavigationRegion2D later for smarter routing
-## around obstacles — the FSM/signals here don't need to change for that.
+## AWARE/HUNT route through the baked navigation mesh (level_manager bakes
+## it from everything in the "walls" group) so a monster on the other side
+## of a maze wall actually walks around to reach you instead of pushing
+## uselessly against it. IDLE wander stays simple straight-line drift —
+## it's ambient, not goal-directed, so it doesn't need a path.
 
 signal killed(enemy: Enemy)
 
@@ -36,6 +38,7 @@ var _contact_timer := 0.0
 
 @onready var sprite: Polygon2D = $Sprite
 @onready var hit_area: Area2D = $HitArea
+@onready var nav_agent: NavigationAgent2D = $NavigationAgent2D
 @onready var footstep_audio: AudioStreamPlayer2D = $FootstepAudio
 @onready var growl_audio: AudioStreamPlayer2D = $GrowlAudio
 @onready var stinger_audio: AudioStreamPlayer2D = $StingerAudio
@@ -136,18 +139,27 @@ func _process_idle(delta: float) -> void:
 
 
 func _process_aware(_delta: float) -> void:
-	var to_target := last_known_player_pos - global_position
-	if to_target.length() < 8.0:
+	if global_position.distance_to(last_known_player_pos) < 8.0:
 		_set_state(State.IDLE)
 		velocity = Vector2.ZERO
 		return
-	velocity = to_target.normalized() * move_speed
+	velocity = _nav_velocity_toward(last_known_player_pos, move_speed)
 
 
 func _process_hunt(_delta: float) -> void:
-	velocity = (_player.global_position - global_position).normalized() * hunt_speed
+	velocity = _nav_velocity_toward(_player.global_position, hunt_speed)
 	if growl_audio and growl_audio.stream and not growl_audio.playing:
 		growl_audio.play()
+
+
+## Routes through the baked navmesh instead of a straight line, so a wall
+## between here and target_pos gets walked around rather than pushed on.
+func _nav_velocity_toward(target_pos: Vector2, speed: float) -> Vector2:
+	nav_agent.target_position = target_pos
+	if nav_agent.is_navigation_finished():
+		return Vector2.ZERO
+	var next_point := nav_agent.get_next_path_position()
+	return (next_point - global_position).normalized() * speed
 
 
 func _pick_new_wander_direction() -> void:
