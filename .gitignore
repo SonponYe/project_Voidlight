@@ -6,15 +6,20 @@ export_presets.cfg
 
 # Exported builds
 build/
+builds/
 export/
 *.exe
 *.pck
 *.zip
 
+# Local copy of the Godot editor used by run.bat — not part of the repo
+godot/
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
 *.swp
+*.log
 
 # Raw asset-pack downloads — extract what you need into assets/, don't commit the zip
 *.zip
