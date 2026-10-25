@@ -53,24 +53,28 @@ Spawn → Explore in darkness → Hear monsters approaching
 
 ## Controls
 
-VOIDLIGHT is designed to play identically on **desktop, browser, gamepad, and touch**. Every action maps to a named input action in `project.godot`, so all four schemes drive the same code paths — no separate mobile build.
+Every action maps to a named input action in `project.godot`, so adding another input scheme later (touch, rebinding) means configuring that action, not touching gameplay code.
 
-| Action | Keyboard + Mouse | Gamepad | Touch (mobile / tablet) |
-|---|---|---|---|
-| **Move** | `W A S D` / Arrow keys | Left stick | Left virtual joystick |
-| **Aim flashlight** | Mouse position | Right stick | Drag anywhere on the right half of the screen |
-| **Shoot** | `Left Click` | `RT` / `R2` | Fire button (bottom-right), or tap on the right half |
-| **Sprint** | `Shift` (hold) | `LT` / `L2` (hold) | Sprint toggle above the fire button |
-| **Pause** | `Escape` | `Start` | Pause icon (top-left of HUD) |
-| **Debug overlay** *(dev only)* | `F1` | `Select` / `Back` | — (disabled in release builds) |
+**Currently playable on keyboard + mouse:**
+
+| Action | Key |
+|---|---|
+| Move | `W A S D` or Arrow keys |
+| Aim flashlight | Mouse position |
+| Shoot | `Left Click` |
+| Sprint (faster, louder — roughly doubles your noise radius) | `Shift` (hold) |
+| Toggle flashlight on/off | `F` or `Right Click` |
+| Pause | `Escape` |
+| Debug overlay *(dev only)* | `F1` |
+
+**Gamepad:** move (left stick), shoot (`RT`/`R2`), sprint (`LT`/`L2`), toggle light (`Y`/`Triangle`), pause (`Start`) are all bound and wired — but there's no aim input for gamepad yet (aiming is mouse-position-only in `player.gd`), so a controller can currently move and fire straight ahead but can't aim independently. Needs either a right-stick-aim implementation or an auto-aim/face-movement-direction fallback before gamepad is actually playable.
+
+**Touch:** not implemented — no on-screen controls exist yet. That's a "look"/UI task, not wired up.
 
 ### Input notes
 
-- **Aim priority:** on hybrid devices the last-used input wins — moving the mouse, nudging the right stick, or dragging on screen each take over aiming instantly.
-- **Sprint = risk:** sprinting is faster but roughly doubles your noise radius. Monsters in AWARE state path toward your last noise source. On touch, sprint is a **toggle** so you never need a third thumb.
-- **Touch layout:** the virtual joystick, aim zone, and buttons only appear when a touchscreen is detected (`DisplayServer.is_touchscreen_available()`), and their positions/opacity are adjustable in the pause menu.
-- **Rebinding:** keyboard and gamepad bindings are remappable from the options menu; changes are saved with `FileAccess` alongside the high score.
-- **Safe areas:** HUD and touch controls respect device notches / rounded corners so nothing critical sits under the bezel.
+- **Sprint = risk:** sprinting is faster but roughly doubles your noise radius. Monsters in AWARE state path toward your last noise source.
+- **Rebinding:** not implemented yet — bindings are fixed in `project.godot`'s input map.
 
 ---
 
