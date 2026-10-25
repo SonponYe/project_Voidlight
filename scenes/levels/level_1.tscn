@@ -7,6 +7,8 @@
 [ext_resource type="PackedScene" path="res://scenes/pickups/ammo_pickup.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/pickups/health_pickup.tscn" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://scenes/pickups/powerup.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://scenes/world/fireplace.tscn" id="9"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_portal"]
 size = Vector2(36, 48)
@@ -54,6 +56,26 @@ position = Vector2(736, 352)
 
 [node name="HealthPickup1" parent="Pickups" instance=ExtResource("6")]
 position = Vector2(608, 608)
+
+[node name="SpeedPowerup" parent="Pickups" instance=ExtResource("8")]
+position = Vector2(800, 96)
+effect = 0
+duration = 8.0
+strength = 1.6
+
+[node name="LightPowerup" parent="Pickups" instance=ExtResource("8")]
+position = Vector2(800, 480)
+effect = 2
+duration = 12.0
+strength = 1.6
+
+[node name="InvinciblePowerup" parent="Pickups" instance=ExtResource("8")]
+position = Vector2(736, 608)
+effect = 1
+duration = 6.0
+
+[node name="Fireplace1" parent="." instance=ExtResource("9")]
+position = Vector2(672, 352)
 
 [node name="ExitPortal" type="Area2D" parent="."]
 position = Vector2(928, 608)
