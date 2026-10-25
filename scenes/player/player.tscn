@@ -25,6 +25,14 @@ shadow_enabled = true
 [node name="GunPoint" type="Marker2D" parent="."]
 position = Vector2(16, 0)
 
+[node name="MuzzleFlash" type="Polygon2D" parent="GunPoint"]
+color = Color(1, 0.95, 0.7, 0.95)
+polygon = PackedVector2Array(12, 0, 3.5, 3.5, 0, 12, -3.5, 3.5, -12, 0, -3.5, -3.5, 0, -12, 3.5, -3.5)
+
+[node name="MuzzleLight" type="PointLight2D" parent="GunPoint"]
+color = Color(1, 0.85, 0.5, 1)
+energy = 2.0
+
 [node name="ShootAudio" type="AudioStreamPlayer2D" parent="."]
 
 [node name="HeartbeatAudio" type="AudioStreamPlayer" parent="."]

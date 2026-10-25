@@ -14,9 +14,12 @@ signal light_toggled(on: bool)
 @export var sprint_noise_radius := 180.0
 @export var flashlight_range := 260.0
 @export var flashlight_half_angle_deg := 35.0
+@export var muzzle_flash_duration := 0.06
 
 @onready var flashlight: PointLight2D = $Flashlight
 @onready var gun_point: Marker2D = $GunPoint
+@onready var muzzle_flash: Polygon2D = $GunPoint/MuzzleFlash
+@onready var muzzle_light: PointLight2D = $GunPoint/MuzzleLight
 @onready var shoot_audio: AudioStreamPlayer2D = $ShootAudio
 @onready var heartbeat_audio: AudioStreamPlayer = $HeartbeatAudio
 @onready var light_toggle_audio: AudioStreamPlayer2D = $LightToggleAudio
@@ -26,10 +29,11 @@ var _light_on := true
 var _speed_multiplier := 1.0
 var _base_flashlight_range: float
 var _effect_expiry: Dictionary = {}  # effect name -> seconds remaining
+var _muzzle_flash_timer := 0.0
 
-const _TEX_W := 256
-const _TEX_H := 192
 const _TEX_RANGE := 240.0
+const _TEX_W := int(_TEX_RANGE * 2.0)
+const _TEX_H := 192
 
 
 func _ready() -> void:
@@ -38,12 +42,16 @@ func _ready() -> void:
 	flashlight.texture = _build_cone_texture()
 	flashlight.offset = Vector2(0, 0)
 	flashlight.texture_scale = flashlight_range / _TEX_RANGE
+	muzzle_flash.visible = false
+	muzzle_light.texture = _build_muzzle_light_texture()
+	muzzle_light.enabled = false
 
 
 func _physics_process(delta: float) -> void:
 	_handle_movement()
 	_aim_at_mouse()
 	_update_effects(delta)
+	_update_muzzle_flash(delta)
 	if Input.is_action_just_pressed("shoot"):
 		_shoot()
 	if Input.is_action_just_pressed("toggle_light"):
@@ -96,7 +104,23 @@ func _shoot() -> void:
 	BulletPool.spawn(gun_point.global_position, Vector2.RIGHT.rotated(rotation))
 	if shoot_audio and shoot_audio.stream:
 		shoot_audio.play()
+	_fire_muzzle_flash()
 	_alert_nearby_idle_enemies()
+
+
+func _fire_muzzle_flash() -> void:
+	_muzzle_flash_timer = muzzle_flash_duration
+	muzzle_flash.visible = true
+	muzzle_light.enabled = true
+
+
+func _update_muzzle_flash(delta: float) -> void:
+	if _muzzle_flash_timer <= 0.0:
+		return
+	_muzzle_flash_timer -= delta
+	if _muzzle_flash_timer <= 0.0:
+		muzzle_flash.visible = false
+		muzzle_light.enabled = false
 
 
 ## Gunshots alert nearby IDLE monsters within a radius, per the design doc.
@@ -182,13 +206,23 @@ func _update_heartbeat() -> void:
 
 ## Builds a soft-edged cone texture once at startup: RGB white, alpha falloff
 ## by distance and angle from +X. Assigned to the PointLight2D as its cookie.
+##
+## Godot centers a Light2D's texture on the node by default. The canvas is
+## therefore built TWICE as wide as the cone's actual reach, with the cone's
+## apex placed at the image's own center (left half left fully transparent)
+## — so that default centering lands the apex exactly on the player instead
+## of the light rendering with its origin floating a half-texture-width
+## behind them (which is what "the light is behind the player" actually was).
 func _build_cone_texture() -> ImageTexture:
 	var img := Image.create(_TEX_W, _TEX_H, false, Image.FORMAT_RGBA8)
 	var half_angle := deg_to_rad(flashlight_half_angle_deg)
+	var cx := _TEX_W / 2.0
 	var cy := _TEX_H / 2.0
 	for y in _TEX_H:
 		for x in _TEX_W:
-			var dx := float(x)
+			var dx := float(x) - cx
+			if dx < 0.0:
+				continue
 			var dy := float(y) - cy
 			var dist := sqrt(dx * dx + dy * dy)
 			var denom: float = dx if dx > 0.001 else 0.001
@@ -199,4 +233,22 @@ func _build_cone_texture() -> ImageTexture:
 				var angle_falloff := 1.0 - smoothstep(half_angle * 0.55, half_angle, angle)
 				a = clamp(dist_falloff * angle_falloff, 0.0, 1.0)
 			img.set_pixel(x, y, Color(1.0, 0.95, 0.82, a))
+	return ImageTexture.create_from_image(img)
+
+
+## Small omnidirectional falloff for the muzzle flash's brief point light —
+## a PointLight2D with no texture assigned renders nothing, so even this
+## tiny effect needs its own cookie, same approach as the main cone.
+func _build_muzzle_light_texture() -> ImageTexture:
+	const SIZE := 64
+	const RANGE := 30.0
+	var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+	var c := SIZE / 2.0
+	for y in SIZE:
+		for x in SIZE:
+			var dist := Vector2(x - c, y - c).length()
+			var a := 0.0
+			if dist <= RANGE:
+				a = 1.0 - smoothstep(RANGE * 0.3, RANGE, dist)
+			img.set_pixel(x, y, Color(1.0, 0.9, 0.6, a))
 	return ImageTexture.create_from_image(img)
