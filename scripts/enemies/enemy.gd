@@ -139,7 +139,13 @@ func hear_gunshot(source_pos: Vector2) -> void:
 
 
 func _player_sees_me(dist: float) -> bool:
-	if dist > flashlight_range:
+	# flashlight_range here is this enemy's own sensory ceiling; the player's
+	# own range can change at runtime (a light_boost powerup), so the actual
+	# cutoff is whichever is smaller.
+	var effective_range: float = flashlight_range
+	if "flashlight_range" in _player:
+		effective_range = min(effective_range, _player.flashlight_range)
+	if dist > effective_range:
 		return false
 	var to_enemy := (global_position - _player.global_position).normalized()
 	var facing := Vector2.RIGHT.rotated(_player.rotation)

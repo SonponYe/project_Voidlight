@@ -3,12 +3,14 @@ extends Node
 
 const STARTING_AMMO := 12
 const STARTING_HP := 3
+const STARTING_LIGHTER_CHARGES := 3
 const AMMO_PICKUP_AMOUNT := 6
 const SAVE_PATH := "user://voidlight_save.save"
 
 var current_level := 1
 var player_hp := STARTING_HP
 var ammo := STARTING_AMMO
+var lighter_charges := STARTING_LIGHTER_CHARGES
 var score := 0
 var total_kills := 0
 var high_score := 0
@@ -22,6 +24,7 @@ func reset_run() -> void:
 	current_level = 1
 	player_hp = STARTING_HP
 	ammo = STARTING_AMMO
+	lighter_charges = STARTING_LIGHTER_CHARGES
 	score = 0
 	total_kills = 0
 
@@ -29,6 +32,7 @@ func reset_run() -> void:
 func begin_level() -> void:
 	player_hp = STARTING_HP
 	ammo = STARTING_AMMO
+	lighter_charges = STARTING_LIGHTER_CHARGES
 
 
 func register_score(points: int) -> void:

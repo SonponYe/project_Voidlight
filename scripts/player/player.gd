@@ -23,6 +23,9 @@ signal light_toggled(on: bool)
 
 var _noise_radius := 0.0
 var _light_on := true
+var _speed_multiplier := 1.0
+var _base_flashlight_range: float
+var _effect_expiry: Dictionary = {}  # effect name -> seconds remaining
 
 const _TEX_W := 256
 const _TEX_H := 192
@@ -31,14 +34,16 @@ const _TEX_RANGE := 240.0
 
 func _ready() -> void:
 	add_to_group("player")
+	_base_flashlight_range = flashlight_range
 	flashlight.texture = _build_cone_texture()
 	flashlight.offset = Vector2(0, 0)
 	flashlight.texture_scale = flashlight_range / _TEX_RANGE
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	_handle_movement()
 	_aim_at_mouse()
+	_update_effects(delta)
 	if Input.is_action_just_pressed("shoot"):
 		_shoot()
 	if Input.is_action_just_pressed("toggle_light"):
@@ -49,7 +54,7 @@ func _handle_movement() -> void:
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var moving := dir != Vector2.ZERO
 	var sprinting := moving and Input.is_action_pressed("sprint")
-	velocity = dir * (speed * (sprint_multiplier if sprinting else 1.0))
+	velocity = dir * (speed * _speed_multiplier * (sprint_multiplier if sprinting else 1.0))
 	move_and_slide()
 
 	_noise_radius = 0.0
@@ -114,11 +119,53 @@ func heal(amount: int) -> void:
 
 
 func take_damage(amount: int = 1) -> void:
+	if _has_effect("invincible"):
+		return
 	Globals.player_hp -= amount
 	hp_changed.emit(Globals.player_hp)
 	_update_heartbeat()
 	if Globals.player_hp <= 0:
 		died.emit()
+
+
+## Generic timed powerup hook — Powerup (scripts/world/powerup.gd) calls this
+## on pickup with one of: "speed", "invincible", "light_boost". Picking up
+## the same effect again extends the remaining time rather than restarting
+## it short, so overlapping pickups stack usefully instead of fighting.
+func apply_powerup(effect: String, duration: float, strength: float = 1.0) -> void:
+	var was_active := _has_effect(effect)
+	_effect_expiry[effect] = max(_effect_expiry.get(effect, 0.0), duration)
+	if was_active:
+		return
+	match effect:
+		"speed":
+			_speed_multiplier = strength
+		"light_boost":
+			flashlight_range = _base_flashlight_range * strength
+			flashlight.texture_scale = flashlight_range / _TEX_RANGE
+
+
+func _has_effect(effect: String) -> bool:
+	return _effect_expiry.has(effect)
+
+
+func _update_effects(delta: float) -> void:
+	if _effect_expiry.is_empty():
+		return
+	for effect in _effect_expiry.keys().duplicate():
+		_effect_expiry[effect] -= delta
+		if _effect_expiry[effect] <= 0.0:
+			_effect_expiry.erase(effect)
+			_end_effect(effect)
+
+
+func _end_effect(effect: String) -> void:
+	match effect:
+		"speed":
+			_speed_multiplier = 1.0
+		"light_boost":
+			flashlight_range = _base_flashlight_range
+			flashlight.texture_scale = flashlight_range / _TEX_RANGE
 
 
 ## Last-stand tension cue: loops a heartbeat once the player is down to
