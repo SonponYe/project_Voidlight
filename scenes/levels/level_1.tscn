@@ -74,6 +74,11 @@ position = Vector2(736, 608)
 effect = 1
 duration = 6.0
 
+[node name="StealthPowerup" parent="Pickups" instance=ExtResource("8")]
+position = Vector2(288, 480)
+effect = 3
+duration = 4.0
+
 [node name="Fireplace1" parent="." instance=ExtResource("9")]
 position = Vector2(672, 352)
 
