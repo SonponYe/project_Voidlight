@@ -16,7 +16,10 @@ signal light_toggled(on: bool)
 @export var flashlight_half_angle_deg := 35.0
 @export var muzzle_flash_duration := 0.06
 
+@export var ambient_glow_radius := 80.0
+
 @onready var flashlight: PointLight2D = $Flashlight
+@onready var ambient_glow: PointLight2D = $AmbientGlow
 @onready var gun_point: Marker2D = $GunPoint
 @onready var muzzle_flash: Polygon2D = $GunPoint/MuzzleFlash
 @onready var muzzle_light: PointLight2D = $GunPoint/MuzzleLight
@@ -42,8 +45,16 @@ func _ready() -> void:
 	flashlight.texture = _build_cone_texture()
 	flashlight.offset = Vector2(0, 0)
 	flashlight.texture_scale = flashlight_range / _TEX_RANGE
+	# Always-on, independent of the flashlight toggle: a small dim radius so
+	# "light off" means stealthy and hard to navigate by torch-light, not
+	# literally unable to see your own feet. Doesn't affect enemy detection
+	# at all — that's driven purely by is_light_on()/is_stealthed(), not by
+	# actual rendered brightness.
+	ambient_glow.texture = _build_radial_texture(64, 30.0, Color(0.8, 0.82, 0.9))
+	ambient_glow.texture_scale = ambient_glow_radius / 30.0
+	ambient_glow.enabled = true
 	muzzle_flash.visible = false
-	muzzle_light.texture = _build_muzzle_light_texture()
+	muzzle_light.texture = _build_radial_texture(64, 30.0, Color(1.0, 0.9, 0.6))
 	muzzle_light.enabled = false
 
 
@@ -86,6 +97,15 @@ func get_noise_radius() -> float:
 ## both but much harder to notice — sound is still what gives you away.
 func is_light_on() -> bool:
 	return _light_on
+
+
+## Enemies check this before any detection logic at all — while active, a
+## stealth powerup makes the player completely unnoticeable, even point-blank
+## with the light on. Doesn't retroactively make an already-chasing enemy
+## forget you; it just stops it (and everything else) from re-spotting you,
+## so you have to actually use the window to get away.
+func is_stealthed() -> bool:
+	return _has_effect("stealth")
 
 
 func _toggle_light() -> void:
@@ -236,19 +256,17 @@ func _build_cone_texture() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-## Small omnidirectional falloff for the muzzle flash's brief point light —
-## a PointLight2D with no texture assigned renders nothing, so even this
-## tiny effect needs its own cookie, same approach as the main cone.
-func _build_muzzle_light_texture() -> ImageTexture:
-	const SIZE := 64
-	const RANGE := 30.0
-	var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
-	var c := SIZE / 2.0
-	for y in SIZE:
-		for x in SIZE:
+## Small omnidirectional soft-falloff cookie, reused for the muzzle flash's
+## brief point light and the always-on ambient glow — a PointLight2D with no
+## texture assigned renders nothing, so even these small effects need one.
+func _build_radial_texture(size: int, px_range: float, color: Color) -> ImageTexture:
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var c := size / 2.0
+	for y in size:
+		for x in size:
 			var dist := Vector2(x - c, y - c).length()
 			var a := 0.0
-			if dist <= RANGE:
-				a = 1.0 - smoothstep(RANGE * 0.3, RANGE, dist)
-			img.set_pixel(x, y, Color(1.0, 0.9, 0.6, a))
+			if dist <= px_range:
+				a = 1.0 - smoothstep(px_range * 0.3, px_range, dist)
+			img.set_pixel(x, y, Color(color.r, color.g, color.b, a))
 	return ImageTexture.create_from_image(img)

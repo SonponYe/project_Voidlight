@@ -15,11 +15,20 @@ shape = SubResource("CircleShape2D_1")
 
 [node name="Visual" type="Polygon2D" parent="."]
 color = Color(0.6, 0.85, 1, 1)
-polygon = PackedVector2Array(14, 0, -10, 8, -10, -8)
+polygon = PackedVector2Array(9.0, 0.0, 6.4, 7.1, 0.0, 10.0, -6.4, 7.1, -9.0, 0.0, -6.4, -7.1, -0.0, -10.0, 6.4, -7.1)
+
+[node name="Head" type="Polygon2D" parent="."]
+color = Color(0.6, 0.85, 1, 1)
+polygon = PackedVector2Array(15.0, 0.0, 13.8, 2.8, 11.0, 4.0, 8.2, 2.8, 7.0, 0.0, 8.2, -2.8, 11.0, -4.0, 13.8, -2.8)
 
 [node name="Flashlight" type="PointLight2D" parent="."]
 color = Color(1, 0.92, 0.75, 1)
 energy = 1.4
+shadow_enabled = true
+
+[node name="AmbientGlow" type="PointLight2D" parent="."]
+color = Color(0.75, 0.78, 0.9, 1)
+energy = 0.55
 shadow_enabled = true
 
 [node name="GunPoint" type="Marker2D" parent="."]
