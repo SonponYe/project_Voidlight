@@ -8,11 +8,13 @@ extends Area2D
 
 @export var burn_duration := 15.0
 @export var light_radius := 420.0
+@export var ember_radius := 50.0
 
 const _TEX_SIZE := 256
 const _TEX_RANGE := 240.0
 
 @onready var glow: PointLight2D = $FirelightGlow
+@onready var ember_glow: PointLight2D = $EmberGlow
 @onready var flame_audio: AudioStreamPlayer2D = $FlameAudio
 
 var _lit := false
@@ -20,10 +22,17 @@ var _burn_timer := 0.0
 
 
 func _ready() -> void:
+	add_to_group("landmarks")
 	body_entered.connect(_on_body_entered)
-	glow.texture = _build_radial_texture()
+	glow.texture = _build_radial_texture(1.0, 0.7, 0.35)
 	glow.texture_scale = light_radius / _TEX_RANGE
 	glow.enabled = false
+	# Always on, small and dim — so an unlit fireplace is still spottable
+	# from a short distance instead of being invisible until you're on top
+	# of it, the same way the player's own ambient glow works.
+	ember_glow.texture = _build_radial_texture(1.0, 0.45, 0.2)
+	ember_glow.texture_scale = ember_radius / _TEX_RANGE
+	ember_glow.enabled = true
 
 
 func _physics_process(delta: float) -> void:
@@ -59,8 +68,8 @@ func _extinguish() -> void:
 
 
 ## Soft circular falloff, no angle restriction (unlike the player's cone) —
-## built once per fireplace the same way the player builds its own cookie.
-func _build_radial_texture() -> ImageTexture:
+## built once per fireplace the same way the player builds its own cookies.
+func _build_radial_texture(r: float, g: float, b: float) -> ImageTexture:
 	var img := Image.create(_TEX_SIZE, _TEX_SIZE, false, Image.FORMAT_RGBA8)
 	var c := _TEX_SIZE / 2.0
 	for y in _TEX_SIZE:
@@ -69,5 +78,5 @@ func _build_radial_texture() -> ImageTexture:
 			var a := 0.0
 			if dist <= _TEX_RANGE:
 				a = 1.0 - smoothstep(_TEX_RANGE * 0.5, _TEX_RANGE, dist)
-			img.set_pixel(x, y, Color(1.0, 0.7, 0.35, a))
+			img.set_pixel(x, y, Color(r, g, b, a))
 	return ImageTexture.create_from_image(img)

@@ -10,6 +10,7 @@ extends Control
 
 var _player: Node2D
 var _enemy_dots: Dictionary = {}  # Enemy -> ColorRect
+var _landmark_dots: Dictionary = {}  # Node2D -> ColorRect, static position, never removed
 
 
 func setup(player: Node2D, monsters: Node, bounds: Rect2) -> void:
@@ -29,6 +30,18 @@ func register_enemy(enemy: Node) -> void:
 	add_child(dot)
 	_enemy_dots[enemy] = dot
 	enemy.killed.connect(_on_enemy_killed)
+
+
+## For things that aren't enemies but are still worth finding on the map —
+## fireplaces, etc. Fixed position, fixed color, never removed.
+func register_landmark(landmark: Node2D, color: Color) -> void:
+	var dot := ColorRect.new()
+	dot.color = color
+	dot.size = dot_size
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(dot)
+	_landmark_dots[landmark] = dot
+	dot.position = _world_to_local(landmark.global_position) - dot_size / 2.0
 
 
 func _on_enemy_killed(enemy: Node) -> void:

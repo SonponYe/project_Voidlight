@@ -23,4 +23,9 @@ color = Color(1, 0.75, 0.4, 1)
 energy = 1.6
 shadow_enabled = true
 
+[node name="EmberGlow" type="PointLight2D" parent="."]
+color = Color(1, 0.55, 0.3, 1)
+energy = 0.5
+shadow_enabled = true
+
 [node name="FlameAudio" type="AudioStreamPlayer2D" parent="."]

@@ -42,6 +42,8 @@ func _ready() -> void:
 
 	hud.set_total_monsters(_total_monsters)
 	hud.minimap.setup(player, monsters, level_bounds)
+	for landmark in get_tree().get_nodes_in_group("landmarks"):
+		hud.minimap.register_landmark(landmark, Color(1.0, 0.6, 0.15, 1.0))
 
 	exit_portal.body_entered.connect(_on_exit_entered)
 	exit_portal.monitoring = not require_all_kills_to_exit
