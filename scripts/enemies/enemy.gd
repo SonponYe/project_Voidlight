@@ -39,6 +39,7 @@ var _contact_timer := 0.0
 var _lost_contact_timer := 0.0
 
 @onready var sprite: Polygon2D = $Sprite
+@onready var head: Polygon2D = get_node_or_null("Head")
 @onready var hit_area: Area2D = $HitArea
 @onready var nav_agent: NavigationAgent2D = $NavigationAgent2D
 @onready var footstep_audio: AudioStreamPlayer2D = $FootstepAudio
@@ -103,6 +104,9 @@ func _update_footsteps() -> void:
 # then gives up to IDLE) instead of chasing forever on a single stale cue.
 
 func _update_detection(delta: float) -> void:
+	if _player.has_method("is_stealthed") and _player.is_stealthed():
+		return
+
 	var dist := global_position.distance_to(_player.global_position)
 	var light_on: bool = _player.is_light_on() if _player.has_method("is_light_on") else true
 
@@ -257,6 +261,8 @@ func _die() -> void:
 	hit_area.set_deferred("monitoring", false)
 	if sprite:
 		sprite.color = Color(0.2, 0.2, 0.2, 0.6)
+	if head:
+		head.color = Color(0.2, 0.2, 0.2, 0.6)
 	killed.emit(self)
 	await get_tree().create_timer(0.15).timeout
 	queue_free()
