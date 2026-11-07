@@ -26,6 +26,7 @@ signal light_toggled(on: bool)
 @onready var shoot_audio: AudioStreamPlayer2D = $ShootAudio
 @onready var heartbeat_audio: AudioStreamPlayer = $HeartbeatAudio
 @onready var light_toggle_audio: AudioStreamPlayer2D = $LightToggleAudio
+@onready var wall_bump_audio: AudioStreamPlayer2D = $WallBumpAudio
 
 var _noise_radius := 0.0
 var _light_on := true
@@ -33,6 +34,9 @@ var _speed_multiplier := 1.0
 var _base_flashlight_range: float
 var _effect_expiry: Dictionary = {}  # effect name -> seconds remaining
 var _muzzle_flash_timer := 0.0
+var _wall_bump_cooldown := 0.0
+
+const WALL_BUMP_COOLDOWN := 0.4
 
 const _TEX_RANGE := 240.0
 const _TEX_W := int(_TEX_RANGE * 2.0)
@@ -59,7 +63,7 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	_handle_movement()
+	_handle_movement(delta)
 	_aim_at_mouse()
 	_update_effects(delta)
 	_update_muzzle_flash(delta)
@@ -69,16 +73,32 @@ func _physics_process(delta: float) -> void:
 		_toggle_light()
 
 
-func _handle_movement() -> void:
+func _handle_movement(delta: float) -> void:
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var moving := dir != Vector2.ZERO
 	var sprinting := moving and Input.is_action_pressed("sprint")
 	velocity = dir * (speed * _speed_multiplier * (sprint_multiplier if sprinting else 1.0))
 	move_and_slide()
+	_update_wall_bump(delta, moving)
 
 	_noise_radius = 0.0
 	if moving:
 		_noise_radius = sprint_noise_radius if sprinting else base_noise_radius
+
+
+## Tactile feedback for "I just walked into something" — a short cooldown
+## so it doesn't spam while held against a wall, not just a one-shot.
+func _update_wall_bump(delta: float, moving: bool) -> void:
+	_wall_bump_cooldown = max(0.0, _wall_bump_cooldown - delta)
+	if not moving or _wall_bump_cooldown > 0.0:
+		return
+	for i in get_slide_collision_count():
+		var collider := get_slide_collision(i).get_collider()
+		if collider and collider.is_in_group("walls"):
+			_wall_bump_cooldown = WALL_BUMP_COOLDOWN
+			if wall_bump_audio and wall_bump_audio.stream:
+				wall_bump_audio.play()
+			break
 
 
 func _aim_at_mouse() -> void:

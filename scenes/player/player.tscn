@@ -48,5 +48,7 @@ energy = 2.0
 
 [node name="LightToggleAudio" type="AudioStreamPlayer2D" parent="."]
 
+[node name="WallBumpAudio" type="AudioStreamPlayer2D" parent="."]
+
 [node name="Camera2D" type="Camera2D" parent="."]
 current = true
