@@ -18,6 +18,8 @@ extends Node2D
 @onready var hud: CanvasLayer = $HUD
 @onready var exit_portal: Area2D = $ExitPortal
 @onready var nav_region: NavigationRegion2D = $NavRegion
+@onready var maze: Node2D = get_node_or_null("Maze")
+@onready var pickups: Node2D = get_node_or_null("Pickups")
 @onready var ambient_drone: AudioStreamPlayer = get_node_or_null("AmbientDrone")
 
 var _total_monsters := 0
@@ -42,8 +44,13 @@ func _ready() -> void:
 
 	hud.set_total_monsters(_total_monsters)
 	hud.minimap.setup(player, monsters, level_bounds)
+	if maze and "layout" in maze:
+		hud.minimap.draw_maze_layout(maze.layout, maze.CELL)
 	for landmark in get_tree().get_nodes_in_group("landmarks"):
 		hud.minimap.register_landmark(landmark, Color(1.0, 0.6, 0.15, 1.0))
+	if pickups:
+		for pickup in pickups.get_children():
+			hud.minimap.register_landmark(pickup, _pickup_minimap_color(pickup))
 
 	exit_portal.body_entered.connect(_on_exit_entered)
 	exit_portal.monitoring = not require_all_kills_to_exit
@@ -77,6 +84,17 @@ func _bake_navigation() -> void:
 	poly.source_geometry_group_name = "walls"
 	nav_region.navigation_polygon = poly
 	nav_region.bake_navigation_polygon(false)
+
+
+## Duck-typed by exported property rather than node name, since pickup
+## scenes don't have class_name: a HealthPickup has heal_amount, a Powerup
+## has effect, anything else here is assumed to be ammo.
+func _pickup_minimap_color(pickup: Node) -> Color:
+	if "heal_amount" in pickup:
+		return Color(0.9, 0.2, 0.3, 1.0)
+	if "effect" in pickup:
+		return Color(0.75, 0.3, 0.95, 1.0)
+	return Color(0.9, 0.85, 0.2, 1.0)
 
 
 func _nearest_enemy_distance() -> float:
