@@ -39,13 +39,17 @@ text = "You can only see as far as your light allows."
 horizontal_alignment = 1
 text = "High Score: 0"
 
-[node name="StartButton" type="Button" parent="VBox"]
-text = "Start"
+[node name="SoloButton" type="Button" parent="VBox"]
+text = "Solo"
+
+[node name="VersusButton" type="Button" parent="VBox"]
+text = "Versus (2 Player, Local)"
 
 [node name="QuitButton" type="Button" parent="VBox"]
 text = "Quit"
 
 [node name="Music" type="AudioStreamPlayer" parent="."]
 
-[connection signal="pressed" from="VBox/StartButton" to="." method="_on_start_pressed"]
+[connection signal="pressed" from="VBox/SoloButton" to="." method="_on_solo_pressed"]
+[connection signal="pressed" from="VBox/VersusButton" to="." method="_on_versus_pressed"]
 [connection signal="pressed" from="VBox/QuitButton" to="." method="_on_quit_pressed"]
