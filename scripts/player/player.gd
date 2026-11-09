@@ -28,6 +28,12 @@ signal power_cooldown_changed(ratio: float)  # 0 = ready, 1 = just used
 @export var flashlight_half_angle_deg := 35.0
 @export var muzzle_flash_duration := 0.06
 
+## -1 = use Globals.STARTING_HP/AMMO (solo mode, unaffected). Versus mode
+## sets these explicitly — a 3-HP duel ends on the first exchange, which
+## doesn't make for much of a fight.
+@export var starting_hp := -1
+@export var starting_ammo := -1
+
 @export var ambient_glow_radius := 80.0
 
 ## The "unique power" each player can trigger on a cooldown — reuses the
@@ -71,8 +77,8 @@ const _TEX_H := 192
 
 func _ready() -> void:
 	add_to_group("player")
-	hp = Globals.STARTING_HP
-	ammo = Globals.STARTING_AMMO
+	hp = starting_hp if starting_hp > 0 else Globals.STARTING_HP
+	ammo = starting_ammo if starting_ammo > 0 else Globals.STARTING_AMMO
 	if camera:
 		camera.enabled = owns_camera
 		if owns_camera:
@@ -205,11 +211,23 @@ func _shoot() -> void:
 	if player_index == 1:
 		Globals.ammo = ammo
 	ammo_changed.emit(ammo)
-	BulletPool.spawn(gun_point.global_position, Vector2.RIGHT.rotated(rotation), 1, team)
+	_bullet_pool().spawn(gun_point.global_position, Vector2.RIGHT.rotated(rotation), 1, team)
 	if shoot_audio and shoot_audio.stream:
 		shoot_audio.play()
 	_fire_muzzle_flash()
 	_alert_nearby_idle_enemies()
+
+
+## A SubViewport (split-screen multiplayer) has its own World2D, separate
+## from the root window's — so the global BulletPool autoload's bullets
+## (which live in the root window's World2D) can never physically collide
+## with anything inside that viewport. A scene can drop a bullet-pool
+## instance in the "local_bullet_pool" group inside the same viewport as
+## the players to fix that; solo scenes have none, so they keep using the
+## global autoload exactly as before.
+func _bullet_pool() -> Node:
+	var local := get_tree().get_first_node_in_group("local_bullet_pool")
+	return local if local else BulletPool
 
 
 ## The unique per-player ability, reusing the exact same timed-effect system
