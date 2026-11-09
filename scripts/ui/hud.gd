@@ -13,7 +13,6 @@ var _total_monsters := 0
 
 func _ready() -> void:
 	hp_bar.max_value = Globals.STARTING_HP
-	refresh()
 	pause_menu.hide()
 
 
@@ -22,10 +21,13 @@ func set_total_monsters(total: int) -> void:
 	_refresh_kill_counter(0)
 
 
-func refresh() -> void:
+## Called by the manager once it knows which player's values to show —
+## HUD itself has no business reaching into Globals (which only ever
+## tracked player 1) or guessing which player it's displaying for.
+func refresh(hp: int, ammo: int) -> void:
 	_refresh_kill_counter(0)
-	ammo_display.text = "Ammo: %d" % Globals.ammo
-	hp_bar.value = Globals.player_hp
+	ammo_display.text = "Ammo: %d" % ammo
+	hp_bar.value = hp
 
 
 func on_hp_changed(hp: int) -> void:

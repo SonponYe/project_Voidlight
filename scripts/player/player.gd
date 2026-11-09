@@ -2,11 +2,23 @@ extends CharacterBody2D
 ## Player: movement, flashlight aim/rotation, shooting, HP, noise emission.
 ## Generates its own flashlight cone texture at runtime so no light-cookie
 ## art asset is required to test the core mechanic.
+##
+## Multiplayer-ready: player_index selects which input actions this instance
+## reads (plain names for player 1, "_p2" suffixed for player 2 — see
+## _action()), and hp/ammo/lighter charges are this instance's OWN state
+## rather than shared globals, so two players never fight over one HP pool.
+## Globals.player_hp/ammo are still mirrored for player 1 only, so solo mode
+## (which only ever has a player_index == 1) behaves exactly as before.
 
 signal hp_changed(hp: int)
 signal ammo_changed(ammo: int)
 signal died
 signal light_toggled(on: bool)
+signal power_cooldown_changed(ratio: float)  # 0 = ready, 1 = just used
+
+@export var player_index: int = 1
+@export var team: int = 1  ## Bullets only damage players on a DIFFERENT team.
+@export var owns_camera: bool = true  ## False in multiplayer — a shared ArenaCamera frames everyone instead.
 
 @export var speed := 140.0
 @export var sprint_multiplier := 1.6
@@ -18,6 +30,14 @@ signal light_toggled(on: bool)
 
 @export var ambient_glow_radius := 80.0
 
+## The "unique power" each player can trigger on a cooldown — reuses the
+## exact same timed-effect system pickups use (apply_powerup), just
+## activated by a button instead of walking over an item.
+@export var power_effect: String = "speed"
+@export var power_duration: float = 5.0
+@export var power_strength: float = 1.6
+@export var power_cooldown: float = 12.0
+
 @onready var flashlight: PointLight2D = $Flashlight
 @onready var ambient_glow: PointLight2D = $AmbientGlow
 @onready var gun_point: Marker2D = $GunPoint
@@ -27,6 +47,10 @@ signal light_toggled(on: bool)
 @onready var heartbeat_audio: AudioStreamPlayer = $HeartbeatAudio
 @onready var light_toggle_audio: AudioStreamPlayer2D = $LightToggleAudio
 @onready var wall_bump_audio: AudioStreamPlayer2D = $WallBumpAudio
+@onready var camera: Camera2D = get_node_or_null("Camera2D")
+
+var hp: int
+var ammo: int
 
 var _noise_radius := 0.0
 var _light_on := true
@@ -35,6 +59,8 @@ var _base_flashlight_range: float
 var _effect_expiry: Dictionary = {}  # effect name -> seconds remaining
 var _muzzle_flash_timer := 0.0
 var _wall_bump_cooldown := 0.0
+var _power_cooldown_timer := 0.0
+var _joystick: Control = null
 
 const WALL_BUMP_COOLDOWN := 0.4
 
@@ -45,6 +71,12 @@ const _TEX_H := 192
 
 func _ready() -> void:
 	add_to_group("player")
+	hp = Globals.STARTING_HP
+	ammo = Globals.STARTING_AMMO
+	if camera:
+		camera.enabled = owns_camera
+		if owns_camera:
+			camera.make_current()
 	_base_flashlight_range = flashlight_range
 	flashlight.texture = _build_cone_texture()
 	flashlight.offset = Vector2(0, 0)
@@ -60,23 +92,39 @@ func _ready() -> void:
 	muzzle_flash.visible = false
 	muzzle_light.texture = _build_radial_texture(64, 30.0, Color(1.0, 0.9, 0.6))
 	muzzle_light.enabled = false
+	_joystick = get_tree().get_first_node_in_group(_joystick_group()) as Control
+
+
+## Player 1 reads the plain action names (unchanged from solo mode); player 2
+## reads the same actions with an "_p2" suffix (see project.godot).
+func _action(name: String) -> String:
+	return name if player_index == 1 else name + "_p2"
+
+
+func _joystick_group() -> String:
+	return "touch_joystick_p%d" % player_index
 
 
 func _physics_process(delta: float) -> void:
 	_handle_movement(delta)
-	_aim_at_mouse()
+	_aim(delta)
 	_update_effects(delta)
 	_update_muzzle_flash(delta)
-	if Input.is_action_just_pressed("shoot"):
+	_update_power_cooldown(delta)
+	if Input.is_action_just_pressed(_action("shoot")):
 		_shoot()
-	if Input.is_action_just_pressed("toggle_light"):
+	if Input.is_action_just_pressed(_action("toggle_light")):
 		_toggle_light()
+	if Input.is_action_just_pressed(_action("use_power")):
+		_use_power()
 
 
 func _handle_movement(delta: float) -> void:
-	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var dir := Input.get_vector(_action("move_left"), _action("move_right"), _action("move_up"), _action("move_down"))
+	if dir == Vector2.ZERO and _joystick and _joystick.visible:
+		dir = _joystick.get_vector()
 	var moving := dir != Vector2.ZERO
-	var sprinting := moving and Input.is_action_pressed("sprint")
+	var sprinting := moving and Input.is_action_pressed(_action("sprint"))
 	velocity = dir * (speed * _speed_multiplier * (sprint_multiplier if sprinting else 1.0))
 	move_and_slide()
 	_update_wall_bump(delta, moving)
@@ -101,10 +149,24 @@ func _update_wall_bump(delta: float, moving: bool) -> void:
 			break
 
 
-func _aim_at_mouse() -> void:
-	var target := get_global_mouse_position()
-	if target.distance_to(global_position) > 1.0:
-		rotation = (target - global_position).angle()
+## Player 1 on a desktop aims at the mouse, same as always. There's no mouse
+## to share with a second local player, and a touchscreen's "mouse" is just
+## wherever you last touched the joystick, so everyone else (player 2, or
+## anyone on touch) faces the direction they're moving instead, holding the
+## last facing when stationary. Real analog-stick aim is a natural follow-up
+## once there's gamepad hardware to actually test it against.
+func _aim(_delta: float) -> void:
+	var touch_active := _joystick != null and _joystick.visible
+	if player_index == 1 and not touch_active:
+		var target := get_global_mouse_position()
+		if target.distance_to(global_position) > 1.0:
+			rotation = (target - global_position).angle()
+		return
+	var dir := Input.get_vector(_action("move_left"), _action("move_right"), _action("move_up"), _action("move_down"))
+	if dir == Vector2.ZERO and touch_active:
+		dir = _joystick.get_vector()
+	if dir.length() > 0.2:
+		rotation = dir.angle()
 
 
 ## Enemies query this to decide whether they heard the player this frame.
@@ -137,15 +199,35 @@ func _toggle_light() -> void:
 
 
 func _shoot() -> void:
-	if Globals.ammo <= 0:
+	if ammo <= 0:
 		return
-	Globals.ammo -= 1
-	ammo_changed.emit(Globals.ammo)
-	BulletPool.spawn(gun_point.global_position, Vector2.RIGHT.rotated(rotation))
+	ammo -= 1
+	if player_index == 1:
+		Globals.ammo = ammo
+	ammo_changed.emit(ammo)
+	BulletPool.spawn(gun_point.global_position, Vector2.RIGHT.rotated(rotation), 1, team)
 	if shoot_audio and shoot_audio.stream:
 		shoot_audio.play()
 	_fire_muzzle_flash()
 	_alert_nearby_idle_enemies()
+
+
+## The unique per-player ability, reusing the exact same timed-effect system
+## a pickup would — the only difference is it's triggered by a button and
+## gated on its own cooldown instead of needing to walk over an item.
+func _use_power() -> void:
+	if _power_cooldown_timer > 0.0:
+		return
+	apply_powerup(power_effect, power_duration, power_strength)
+	_power_cooldown_timer = power_cooldown
+	power_cooldown_changed.emit(1.0)
+
+
+func _update_power_cooldown(delta: float) -> void:
+	if _power_cooldown_timer <= 0.0:
+		return
+	_power_cooldown_timer = max(0.0, _power_cooldown_timer - delta)
+	power_cooldown_changed.emit(_power_cooldown_timer / power_cooldown)
 
 
 func _fire_muzzle_flash() -> void:
@@ -172,23 +254,29 @@ func _alert_nearby_idle_enemies(radius: float = 320.0) -> void:
 
 
 func add_ammo(amount: int) -> void:
-	Globals.ammo += amount
-	ammo_changed.emit(Globals.ammo)
+	ammo += amount
+	if player_index == 1:
+		Globals.ammo = ammo
+	ammo_changed.emit(ammo)
 
 
 func heal(amount: int) -> void:
-	Globals.player_hp += amount
-	hp_changed.emit(Globals.player_hp)
+	hp += amount
+	if player_index == 1:
+		Globals.player_hp = hp
+	hp_changed.emit(hp)
 	_update_heartbeat()
 
 
 func take_damage(amount: int = 1) -> void:
 	if _has_effect("invincible"):
 		return
-	Globals.player_hp -= amount
-	hp_changed.emit(Globals.player_hp)
+	hp -= amount
+	if player_index == 1:
+		Globals.player_hp = hp
+	hp_changed.emit(hp)
 	_update_heartbeat()
-	if Globals.player_hp <= 0:
+	if hp <= 0:
 		died.emit()
 
 
@@ -237,7 +325,7 @@ func _end_effect(effect: String) -> void:
 func _update_heartbeat() -> void:
 	if heartbeat_audio == null or heartbeat_audio.stream == null:
 		return
-	var critical := Globals.player_hp == 1
+	var critical := hp == 1
 	if critical and not heartbeat_audio.playing:
 		heartbeat_audio.play()
 	elif not critical and heartbeat_audio.playing:

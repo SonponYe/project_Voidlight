@@ -43,6 +43,7 @@ func _ready() -> void:
 		player.died.connect(_on_player_died)
 
 	hud.set_total_monsters(_total_monsters)
+	hud.refresh(player.hp, player.ammo)
 	hud.minimap.setup(player, monsters, level_bounds)
 	if maze and "layout" in maze:
 		hud.minimap.draw_maze_layout(maze.layout, maze.CELL)
