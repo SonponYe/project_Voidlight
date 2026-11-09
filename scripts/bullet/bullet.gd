@@ -1,6 +1,7 @@
 extends Area2D
-## Pooled projectile. Travels straight, damages the first enemy it touches,
-## and deactivates on contact with an enemy or a wall.
+## Pooled projectile. Travels straight, damages the first enemy OR
+## different-team player it touches, and deactivates on contact with
+## either (or a wall).
 
 @export var speed := 640.0
 @export var lifetime := 1.2
@@ -8,6 +9,7 @@ extends Area2D
 var _velocity := Vector2.ZERO
 var _life := 0.0
 var _damage := 1
+var _shooter_team := 0
 var _active := false
 
 
@@ -15,12 +17,13 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 
 
-func activate(global_pos: Vector2, direction: Vector2, damage: int) -> void:
+func activate(global_pos: Vector2, direction: Vector2, damage: int, shooter_team: int = 0) -> void:
 	global_position = global_pos
 	rotation = direction.angle()
 	_velocity = direction.normalized() * speed
 	_life = 0.0
 	_damage = damage
+	_shooter_team = shooter_team
 	_active = true
 	visible = true
 	set_physics_process(true)
@@ -53,6 +56,9 @@ func _on_body_entered(body: Node) -> void:
 		return
 	if body.is_in_group("enemies") and body.has_method("hit"):
 		body.hit(_damage)
+		deactivate()
+	elif body.is_in_group("player") and "team" in body and body.team != _shooter_team and body.has_method("take_damage"):
+		body.take_damage(_damage)
 		deactivate()
 	elif body.is_in_group("walls"):
 		deactivate()

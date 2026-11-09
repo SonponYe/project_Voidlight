@@ -18,7 +18,9 @@ func _ready() -> void:
 
 
 ## Fire one bullet from the pool toward `direction` (normalized internally).
-func spawn(global_pos: Vector2, direction: Vector2, damage: int = 1) -> void:
+## shooter_team is only meaningful for PvP — a bullet never damages a player
+## on the same team (see bullet.gd).
+func spawn(global_pos: Vector2, direction: Vector2, damage: int = 1, shooter_team: int = 0) -> void:
 	var b: Node2D = _pool[_next]
 	_next = (_next + 1) % _pool.size()
-	b.activate(global_pos, direction, damage)
+	b.activate(global_pos, direction, damage, shooter_team)
