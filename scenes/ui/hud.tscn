@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/ui/minimap.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/ui/virtual_joystick.tscn" id="3"]
 
 [node name="HUD" type="CanvasLayer"]
 process_mode = 3
@@ -54,6 +55,14 @@ offset_right = 107.0
 offset_bottom = 82.0
 color = Color(1, 1, 1, 1)
 mouse_filter = 2
+
+[node name="Joystick" parent="." instance=ExtResource("3")]
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -150.0
+offset_right = 144.0
+offset_bottom = -30.0
 
 [node name="PauseMenu" type="Control" parent="."]
 anchor_right = 1.0
