@@ -74,6 +74,7 @@ var _muzzle_flash_timer := 0.0
 var _wall_bump_cooldown := 0.0
 var _power_cooldown_timer := 0.0
 var _joystick: Control = null
+var _aim_pad: Control = null
 var _blackout_prev_modulate: Color
 var _blackout_dimmed_players: Array = []  # [player, prev_flashlight_enabled, prev_ambient_enabled]
 
@@ -108,6 +109,7 @@ func _ready() -> void:
 	muzzle_light.texture = _build_radial_texture(64, 30.0, Color(1.0, 0.9, 0.6))
 	muzzle_light.enabled = false
 	_joystick = get_tree().get_first_node_in_group(_joystick_group()) as Control
+	_aim_pad = get_tree().get_first_node_in_group(_aim_pad_group()) as Control
 
 
 ## Player 1 reads the plain action names (unchanged from solo mode); player 2
@@ -118,6 +120,10 @@ func _action(name: String) -> String:
 
 func _joystick_group() -> String:
 	return "touch_joystick_p%d" % player_index
+
+
+func _aim_pad_group() -> String:
+	return "touch_aim_p%d" % player_index
 
 
 func _physics_process(delta: float) -> void:
@@ -164,13 +170,17 @@ func _update_wall_bump(delta: float, moving: bool) -> void:
 			break
 
 
-## Player 1 on a desktop aims at the mouse, same as always. There's no mouse
-## to share with a second local player, and a touchscreen's "mouse" is just
-## wherever you last touched the joystick, so everyone else (player 2, or
-## anyone on touch) faces the direction they're moving instead, holding the
-## last facing when stationary. Real analog-stick aim is a natural follow-up
-## once there's gamepad hardware to actually test it against.
+## Aim priority: a touch-drag aim pad (if this player has one on screen)
+## always wins, since it's an explicit aim gesture. Failing that, player 1
+## on a desktop aims at the mouse, same as always — there's no mouse to
+## share with a second local player, and a touchscreen's "mouse" is just
+## wherever you last touched the joystick. Everyone else (player 2, or
+## anyone on touch with no aim pad) faces the direction they're moving
+## instead, holding the last facing when stationary.
 func _aim(_delta: float) -> void:
+	if _aim_pad and _aim_pad.visible:
+		rotation = _aim_pad.get_vector().angle()
+		return
 	var touch_active := _joystick != null and _joystick.visible
 	if player_index == 1 and not touch_active:
 		var target := get_global_mouse_position()
