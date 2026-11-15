@@ -2,293 +2,276 @@
 
 > *You can only see as far as your light allows. But they can hear everything.*
 
-A 2D top-down horror survival game built in Godot 4.x.  
-Developer: **Sonpon Ye-shua Chief** | Engine: **Godot 4.x** | Language: **GDScript**  
-Target Platform: **Itch.io (HTML5 + Windows)**
+A 2D top-down horror game built in Godot 4.x, now with two ways to play: a **Solo** survival mode (clear a dark, monster-filled arena and reach the exit) and a **Versus** mode (two players, one device, split-screen, hunting each other with a flashlight, a gun, and a unique power each).
+
+Developer: **Sonpon Ye-shua Chief** | Engine: **Godot 4.7.x** | Language: **GDScript**
+Target Platform: **Itch.io (HTML5 + Windows)**, designed to also work on touchscreens
 
 ---
 
 ## Table of Contents
 
 - [Concept](#concept)
-- [Core Loop](#core-loop)
+- [Game Modes](#game-modes)
 - [Controls](#controls)
 - [Mechanics](#mechanics)
-- [Enemy Types](#enemy-types)
+- [Powerups](#powerups)
+- [Enemy Types (Solo mode)](#enemy-types-solo-mode)
 - [Level Overview](#level-overview)
 - [Scene Architecture](#scene-architecture)
 - [Systems Checklist](#systems-checklist)
 - [Asset Credits](#asset-credits)
-- [Development Roadmap](#development-roadmap)
+- [Status & Roadmap](#status--roadmap)
 - [How to Run](#how-to-run)
 
 ---
 
 ## Concept
 
-VOIDLIGHT is a 2D top-down horror survival game. The player is trapped inside a dark, labyrinthine facility armed with nothing but a flashlight and a gun. The core tension: **you can only see as far as your light reaches**, but monsters navigate by sound. Every footstep you take is information they can use.
+VOIDLIGHT started as a solo horror-survival game: you're dropped into a dark arena with nothing but a flashlight and a gun. You can only see what your light touches — everything outside the cone is invisible — but monsters can hear you, especially if you sprint. Turning the light off makes you nearly undetectable, but also blind: no minimap, no maze layout, just your own faint ambient glow to feel your way around.
 
-Each level is a self-contained map. Your objective is simple — **kill every monster and get out alive**. The minimap in the top-right corner shows you the full layout and every enemy position. But knowing where they are and surviving long enough to reach them are very different things.
+That same light-vs-detection tension turned out to work just as well **player vs player** — so VOIDLIGHT now also has a local split-screen **Versus** mode: two people on one device, same arena, hunting each other with the same flashlight/stealth mechanics, each with one unique power that can swing a fight.
 
 ---
 
-## Core Loop
+## Game Modes
 
-```
-Spawn → Explore in darkness → Hear monsters approaching
-→ Locate via sound + minimap → Engage in flashlight cone
-→ Kill all monsters → Exit portal unlocks → Next level
-```
+### Solo
+Enter an open arena full of scattered crate cover and AI-controlled monsters. Kill or evade them, use pickups and fireplaces along the way, and reach the exit. The exit is open from the start — the goal is getting out alive, not clearing every monster (though clearing them stops them chasing you).
 
-**The four pillars of VOIDLIGHT:**
+### Versus (2 Player, Local)
+Two players, one device, **no shared camera** — the screen splits top/bottom and each player only ever sees their own surroundings, exactly like they would playing alone. Same arena-with-cover philosophy as Solo, but larger, fully sealed (no entrance/exit — there's nothing to escape, just a fight), and PvP: your bullets hurt the other player, theirs hurt you. Each player gets one unique power on a cooldown (see [Powerups](#powerups)). Last player with HP left wins.
 
-| Pillar | Description |
-|---|---|
-| **Tension** | You hear them before you see them |
-| **Information Asymmetry** | Minimap sees all. Your flashlight sees little. |
-| **Decision Making** | When to move, when to stay still, when to shoot |
-| **Escalation** | Every level is harder than the last |
+Reachable from the main menu's **Versus (2 Player, Local)** button.
 
 ---
 
 ## Controls
 
-Every action maps to a named input action in `project.godot`, so adding another input scheme later (touch, rebinding) means configuring that action, not touching gameplay code.
+Every action maps to a named input action in `project.godot`, so adding another input scheme later means configuring that action, not touching gameplay code.
 
-**Currently playable on keyboard + mouse:**
+**Player 1 (keyboard + mouse):**
 
 | Action | Key |
 |---|---|
 | Move | `W A S D` or Arrow keys |
-| Aim flashlight | Mouse position |
+| Aim | Mouse position |
 | Shoot | `Left Click` |
-| Sprint (faster, louder — roughly doubles your noise radius) | `Shift` (hold) |
+| Sprint (faster, louder) | `Shift` (hold) |
 | Toggle flashlight on/off | `F` or `Right Click` |
+| Use unique power | `Q` |
 | Pause | `Escape` |
 | Debug overlay *(dev only)* | `F1` |
 
-**Gamepad:** move (left stick), shoot (`RT`/`R2`), sprint (`LT`/`L2`), toggle light (`Y`/`Triangle`), pause (`Start`) are all bound and wired — but there's no aim input for gamepad yet (aiming is mouse-position-only in `player.gd`), so a controller can currently move and fire straight ahead but can't aim independently. Needs either a right-stick-aim implementation or an auto-aim/face-movement-direction fallback before gamepad is actually playable.
+**Player 2 (keyboard, for local Versus matches on one keyboard):**
 
-**Touch:** not implemented — no on-screen controls exist yet. That's a "look"/UI task, not wired up.
+| Action | Key |
+|---|---|
+| Move | `I J K L` |
+| Shoot | `U` |
+| Sprint | `O` |
+| Toggle flashlight | `P` |
+| Use unique power | `M` |
 
-### Input notes
+Player 2 has no mouse to aim with (there's only one on the device), so they — and anyone on a touchscreen — aim by facing whichever direction they're moving, holding the last facing when stationary. Real analog-stick aim is a natural follow-up once there's gamepad hardware to test it against.
 
-- **Sprint = risk:** sprinting is faster but roughly doubles your noise radius. Monsters in AWARE state path toward your last noise source.
-- **Rebinding:** not implemented yet — bindings are fixed in `project.godot`'s input map.
+**Gamepad:** move/shoot/sprint/toggle-light/power are all bound for two controllers (device 0 = player 1, device 1 = player 2), but there's no dedicated aim input yet — same movement-direction fallback as above applies.
+
+**Touch:** an on-screen virtual joystick (drag to move, releases to center) shows automatically on touchscreens, one per player via `touch_joystick_p1`/`touch_joystick_p2` groups. Shooting/aiming on touch isn't built yet — that's the next touch-control piece.
 
 ---
 
 ## Mechanics
 
 ### Flashlight / Visibility
+The flashlight is a `PointLight2D` whose cone texture is generated procedurally at runtime (no art asset needed) — a ~70° cone, range tunable per-player, that rotates to follow aim. `CanvasModulate` darkens everything else to near-black, and walls cast real shadows via `LightOccluder2D`.
 
-The flashlight is a `PointLight2D` node attached to the player. The world is covered by a `CanvasModulate` set to near-black — the flashlight cuts through it in a cone.
-
-- Cone angle: ~70 degrees
-- Walls and objects cast real shadows via `LightOccluder2D`
-- The cone rotates to follow the mouse cursor at all times
-- Everything outside the cone is effectively invisible
+On top of that, every player also has a small, **always-on** ambient glow independent of the flashlight toggle — enough to see your immediate surroundings and tell whether you're actually moving, even with the main light off. It has **zero effect on detection or stealth** (that's driven purely by whether the light is toggled on, not by actual rendered brightness) — it exists purely so "light off" means hard-to-detect, not literally unable to see your own feet.
 
 ### Minimap
+A Control panel (not a camera/viewport) in the top-right of the HUD. It draws the arena's wall layout directly (so it reads as an actual map, not just dots on a blank panel), plus:
+- Player dot: white
+- Enemy dots: red, removed when the enemy dies
+- Fireplace / pickup dots: orange / yellow / pink / purple, removed once collected
 
-A `SubViewport` renders a second camera positioned high above the level. Displayed as a panel in the top-right corner of the HUD.
-
-- Player dot: **white**
-- Enemy dots: **red** — visible even in darkness
-- Map layout fully visible
-- Enemy dots are removed when the enemy is killed
+**The whole minimap disappears when your flashlight is off** — no layout, no dots, nothing. Light is the only way to see the map, same as it's the only way enemies can really see you.
 
 ### Audio as Gameplay
+Every sound hook is wired and silent until an actual audio file is assigned (same "drop in a file, it just works" pattern throughout):
+- Gunshot, muzzle flash (visual + brief point-light pulse), flashlight toggle click, wall-bump ("you just walked into something"), footsteps (volume naturally increases with proximity via positional audio, no extra code needed), growl while hunting, a one-shot "lock-on" stinger the instant an enemy spots you, a heartbeat loop at 1 HP, and an ambient drone that pitches up as the nearest monster closes in.
+- Gunshots alert nearby idle monsters within a radius.
 
-Monsters emit positional `AudioStreamPlayer2D` audio. This is not just atmosphere — **it is information**.
+### Ammo & Health
+- Starting ammo: **12** (ammo pickups restore **6**)
+- Starting HP: **3** in Solo — Versus mode runs a higher pool (**6 HP / 16 ammo** per player) since a 3-HP duel ends on the first exchange
+- No regeneration; health pickups restore HP
+- Both are **per-player** state (not shared), so two Versus players never fight over one HP/ammo pool
 
-- Footstep volume increases as monster approaches
-- In HUNT state: growling/breathing intensifies
-- Gunshots alert nearby IDLE monsters within a radius
-- Ambient drone pitch shifts based on nearest monster distance
-
-### Ammo
-
-The player starts each level with limited ammo. Pickups are scattered across the map.
-
-- Default starting ammo: **12 rounds**
-- Pickup restores: **6 rounds**
-- When ammo = 0, shooting is disabled
-- Ammo count displayed on HUD at all times
-
-### Player Health
-
-- Default HP: **3 hits**
-- HP bar displayed on HUD
-- No natural regeneration
-- Health pickups available on harder levels
+### Fireplaces
+Walk into one to ignite it — consumes one of **3 lighter charges** (resets each level) and lights a radius bigger than your own flashlight (and casts real shadows the same way) for **15 seconds**, then goes dark again. It's a second, independent light source: your own flashlight toggle and movement are completely unaffected while one's burning. Unlit fireplaces give off a faint ember glow so they're spottable before you're standing on top of one, and show up on the minimap.
 
 ---
 
-## Enemy Types
+## Powerups
 
-### Walker *(introduced Level 1)*
-The standard enemy. Moves at medium speed in AWARE state, charges in HUNT state. Predictable — but dangerous in groups.
+One reusable pickup script covers every type — each gets a distinct **shape** (not just color) so its effect is readable at a glance even as a placeholder:
 
-### Crawler *(introduced Level 2)*
-Faster than the Walker in HUNT state (1.8× speed multiplier). Low to the ground with a different animation profile. Harder to see in tight corridors.
+| Powerup | Shape | Effect |
+|---|---|---|
+| Speed Boost | Lightning bolt | Move speed multiplier for a few seconds |
+| Invincibility | Shield | `take_damage()` is a no-op for the duration |
+| Light Boost | Sunburst | Flashlight range scales up (also increases how far enemies can spot you — it's a trade-off, not a free buff) |
+| Stealth | 4-point star | Completely unnoticeable — even point-blank with your light on — for a few seconds |
 
-### Lurker *(introduced Level 3)*
-Teleports to a random nearby position every 4 seconds while in AWARE state. Unpredictable positioning makes it the most dangerous enemy type in the game.
+In **Versus mode**, each player also has one of these as a built-in **unique power** on a cooldown (`Q`/`M` by default) — the exact same effect system a pickup uses, just button-triggered instead of walked over. Currently Player 1 gets Speed, Player 2 gets Stealth, as a first example of asymmetric powers; swapping which power goes to which player (or letting players choose) is just changing exported values on the scene.
 
-### Enemy FSM
+---
 
-Every enemy runs a Finite State Machine with four states:
+## Enemy Types (Solo mode)
+
+### Walker
+The standard enemy. Medium speed while AWARE, charges at full speed once it locks onto you.
+
+### Crawler
+1.8× Walker's speed once hunting. Harder to escape once spotted.
+
+### Lurker
+Teleports to a random nearby spot every few seconds while AWARE — the most unpredictable of the three.
+
+### Detection FSM
 
 ```
-IDLE ──(enters sound radius)──► AWARE ──(very close / in flashlight)──► HUNT
-                                                                           │
-                                                                      (shot)
-                                                                           │
-                                                                         DEAD
+IDLE ──(hears you, or line-of-sight + close/lit)──► AWARE ──(spotted)──► HUNT
+  ▲                                                                        │
+  └──────────────── gives up after losing contact for 2.5s ───────────────┘
 ```
 
-| State | Behaviour |
-|---|---|
-| `IDLE` | Wanders slowly in random directions |
-| `AWARE` | Moves toward last known player position at medium speed |
-| `HUNT` | Charges at full speed — attacks on contact |
-| `DEAD` | Plays death animation, disables collision, removes from scene |
+Detection requires an actual unobstructed **line of sight** — a wall between you and an enemy fully hides you, it can't "sense" you through it. With the light **on**, enemies can spot you from a short range in any direction or from further away in your flashlight's own cone; with it **off**, only literally bumping into something or making noise (sprinting, gunshots) gives you away. A **Stealth** powerup suppresses all of this entirely while active. Once hunting, an enemy that genuinely loses track of you (no sight, sound, or proximity) for 2.5 seconds gives up and goes back to idle — it doesn't chase forever off one stale cue.
 
 ---
 
 ## Level Overview
 
-| Level | Monsters | Enemy Types | Map Size | New Element |
-|---|---|---|---|---|
-| 1 | 5 | Walker | Small | Tutorial — open layout, clear sightlines |
-| 2 | 8 | Walker, Crawler | Medium | Tighter corridors, Crawler speed threat |
-| 3 | 12 | Walker, Crawler, Lurker | Large | Lurker teleportation, scarce ammo |
-| 4 | 15 | All types | Large | Multiple threats at once, resource pressure |
-| 5 | 20 + Boss | All types + Boss | XL | Boss requires 5 hits to kill |
+Only one arena exists per mode right now:
+
+| Mode | Scene | Size | Notes |
+|---|---|---|---|
+| Solo — Level 1 | `scenes/levels/level_1.tscn` | 960×704 | Open floor plan, scattered crate cover (not a tight maze), 5 Walkers, ammo/health/4 powerup pickups, 1 fireplace, exit open from the start |
+| Versus Arena | `scenes/levels/arena_versus.tscn` | 1280×896 | Larger, fully sealed (no entrance/exit), 10 scattered crate blocks for cover, 2 ammo pickups, no AI — pure PvP |
+
+Levels 2–5 and a boss enemy (both mentioned in early planning) are **not built yet**.
 
 ---
 
 ## Scene Architecture
 
-### Scene Tree
+### Solo level (`level_1.tscn`)
 
 ```
-World (Node2D)
-├── TileMap                          ← level geometry + colliders + occluders
-├── CanvasModulate                   ← full-screen darkness layer
-├── NavigationRegion2D               ← walkable area for enemy pathfinding
-├── Player (CharacterBody2D)
-│   ├── CollisionShape2D
-│   ├── AnimatedSprite2D
-│   ├── Flashlight (PointLight2D)
-│   ├── GunPoint (Marker2D)          ← bullet spawn position
-│   ├── AudioStreamPlayer2D          ← gunshot, footsteps
-│   └── GunRayCast (RayCast2D)
-├── Monsters (Node2D)                ← container for all enemies
-│   └── [Enemy] (CharacterBody2D)
-│       ├── CollisionShape2D
-│       ├── AnimatedSprite2D
-│       ├── NavigationAgent2D
-│       └── AudioStreamPlayer2D      ← footsteps, growl
-├── Pickups (Node2D)
-│   ├── AmmoPickup (Area2D)
-│   └── HealthPickup (Area2D)
-└── HUD (CanvasLayer)
-    ├── KillCounter (Label)
-    ├── AmmoDisplay (Label)
-    ├── HPBar (TextureProgressBar)
-    ├── PauseMenu (Control)
-    └── Minimap (SubViewportContainer)
-        └── SubViewport
-            └── MinimapCamera (Camera2D)
+World (Node2D, level_manager.gd)
+├── CanvasModulate                    ← darkens everything outside lit areas
+├── Maze (Node2D, maze.gd)            ← builds floor/walls from a text grid at load
+│   └── [Wall instances]              ← per-cell prefab: collision + LightOccluder2D + art
+├── NavRegion (NavigationRegion2D)    ← baked at runtime from everything in the "walls" group
+├── Player (player.tscn)
+│   ├── Flashlight / AmbientGlow (PointLight2D)
+│   ├── GunPoint → MuzzleFlash / MuzzleLight
+│   └── several AudioStreamPlayer2D hooks (silent until a stream is assigned)
+├── Monsters (Node2D) → Walker/Crawler/Lurker instances (enemy.gd FSM base)
+├── Pickups (Node2D) → ammo / health / powerup instances
+├── Fireplace instances
+├── ExitPortal (Area2D)
+└── HUD (CanvasLayer, hud.gd)
+    ├── Minimap (Control, minimap.gd)  ← draws maze + dots, not a camera/viewport
+    └── Joystick (touch, virtual_joystick.gd)
 ```
+
+### Versus arena (`arena_versus.tscn`)
+
+Split-screen without a shared camera: two `SubViewport`s stacked top/bottom, **sharing one `World2D`** (so it's one real arena, not two disconnected copies) but each with its **own** `Camera2D` locked to one player.
+
+```
+VersusArena (Control, versus_manager.gd)
+└── VBox
+    ├── P1Container (SubViewportContainer)
+    │   └── P1Viewport (SubViewport)        ← the "real" world: Maze, both Players, pickups
+    │       ├── Player1 (owns_camera = true — its own Camera2D drives this viewport)
+    │       ├── Player2 (owns_camera = false — rendered here, but not viewed from here)
+    │       └── LocalBulletPool             ← see note below
+    ├── Divider
+    └── P2Container (SubViewportContainer)
+        └── P2Viewport (SubViewport, world_2d shared with P1Viewport)
+            └── P2Camera                    ← synced to Player2's position every frame
+```
+
+**Why there's a `LocalBulletPool`:** the global `BulletPool` autoload lives in the root window's `World2D`, which is a *different physics space* from anything inside a `SubViewport`. Bullets fired through the autoload would fly straight through players with zero collision. `player.gd` prefers a bullet pool in the scene's own `"local_bullet_pool"` group (living in the same viewport as the players) when one exists, falling back to the global autoload otherwise — so Solo scenes (no SubViewports) are completely unaffected.
 
 ### Autoloads (Globals)
 
 | Autoload | Purpose |
 |---|---|
-| `Globals.gd` | Current level, player HP, ammo, score, total kills |
-| `BulletPool.gd` | Pre-instantiated bullet pool — no runtime instantiate/free |
+| `Globals.gd` | Cross-scene state: current level, score, high score, lighter charges. HP/ammo are now **per-player** (on `player.gd`), mirrored into `Globals.player_hp`/`ammo` for player 1 only so nothing else that reads them breaks. |
+| `BulletPool.gd` | Pre-instantiated bullet pool — no runtime instantiate/free. Also usable as a plain (non-autoload) node, which is exactly what `LocalBulletPool` does. |
 
 ### Key Scripts
 
-| Script | Node | Responsibility |
-|---|---|---|
-| `player.gd` | Player | Movement, rotation, shooting, HP, signals |
-| `enemy.gd` | Enemy (base) | FSM, navigation, audio, death |
-| `walker.gd` | Walker | Extends enemy.gd |
-| `crawler.gd` | Crawler | Extends enemy.gd, modified HUNT speed |
-| `lurker.gd` | Lurker | Extends enemy.gd, teleport behaviour |
-| `hud.gd` | HUD | Connects signals, updates all UI elements |
-| `minimap.gd` | Minimap | Syncs dot positions to world coordinates |
-| `level_manager.gd` | World | Tracks kill count, triggers exit portal, loads next scene |
+| Script | Responsibility |
+|---|---|
+| `player.gd` | Movement, aim, shooting, HP/ammo, flashlight + ambient glow, muzzle flash, wall-bump audio, timed-effect system (powerups), the power button, `player_index`-based input resolution (so one script serves both local players) |
+| `enemy.gd` | FSM base (IDLE/AWARE/HUNT/DEAD), line-of-sight detection, navmesh pathfinding, contact damage, audio hooks |
+| `walker.gd` / `crawler.gd` / `lurker.gd` | Enemy.gd subclasses — speed/teleport overrides only |
+| `bullet.gd` / `bullet_pool.gd` | Pooled projectile; damages enemies or a different-team player |
+| `maze.gd` | Builds floor/walls from a `PackedStringArray` text grid; also merges wall-run collision to avoid seam-tunneling, and seals an outer boundary so you can't wander off into the void |
+| `wall.gd` | Reusable wall prefab — one exported `size`, builds its own collision + occluder + art |
+| `powerup.gd` | Generic timed-effect pickup, one script for all 4 effect types |
+| `fireplace.gd` | Ignite/extinguish timer, ember glow, lighter-charge consumption |
+| `level_manager.gd` | Solo mode: kill tracking, exit, HUD/minimap wiring, navmesh baking |
+| `versus_manager.gd` | Versus mode: split-screen world sharing, per-player HUD, win condition, results screen |
+| `arena_camera.gd` | A shared-midpoint camera (built, not currently used — Versus uses per-player cameras instead; kept for a possible future co-op mode) |
+| `hud.gd` / `minimap.gd` | Solo HUD/minimap — signal-driven, no direct Globals reads |
+| `virtual_joystick.gd` | Touch movement input, one instance per player via group membership |
 
 ---
 
 ## Systems Checklist
 
-Track build progress here. Check off as each system is completed.
+### Core (done)
+- [x] Project structure, input map, physics layers
+- [x] CharacterBody2D movement, mouse/flashlight-direction aim
+- [x] Procedural flashlight cone (no art asset needed) + always-on ambient glow
+- [x] `CanvasModulate` darkness + `LightOccluder2D` shadows
+- [x] Pooled bullets, muzzle flash
+- [x] Enemy FSM with line-of-sight detection + "gives up" timer
+- [x] `NavigationAgent2D` + runtime-baked `NavigationRegion2D` pathfinding
+- [x] Text-grid maze builder with merged wall collision + sealed boundary
+- [x] HUD (HP/ammo/kills), Control-based minimap drawing the real layout
+- [x] Pause menu
+- [x] Ammo/health pickups, save/load high score
+- [x] Generic powerup system (speed/invincibility/light-boost/stealth) with distinct shapes
+- [x] Fireplaces (temporary big light, limited charges, ember glow, minimap dot)
+- [x] Audio hooks for every major event (silent until streams are assigned)
+- [x] On-screen virtual joystick for touch
+- [x] Local split-screen Versus mode: per-player cameras, PvP damage, unique powers, win/results screen
+- [x] `run.bat` — double-click to play, no Godot editor needed
 
-### Month 1 — Foundations
-- [ ] Godot editor and project structure set up
-- [ ] GDScript fundamentals — variables, functions, loops, signals
-- [ ] CharacterBody2D player movement (WASD)
-- [ ] Mouse rotation — flashlight arm follows cursor
-- [ ] TileMap walls with collision
-- [ ] Bullet scene — instantiated on click, destroys on wall contact
-- [ ] Enemy hit detection via Area2D signals
-- [ ] Scene transitions — Menu → Level → Level Complete → Game Over
-- [ ] HUD — HP bar + kill counter (CanvasLayer)
-- [ ] Ammo system + pause menu
-- [ ] Save/load high score with FileAccess
-
-### Month 2 — Core Systems
-- [ ] CanvasModulate full-screen darkness
-- [ ] PointLight2D flashlight cone
-- [ ] LightOccluder2D shadow casting on walls
-- [ ] NavigationRegion2D + NavigationAgent2D enemy pathfinding
-- [ ] Enemy FSM — IDLE / AWARE / HUNT / DEAD
-- [ ] Positional AudioStreamPlayer2D on enemies
-- [ ] Ambient drone + SFX bus layout
-- [ ] SubViewport minimap with player + enemy dots
-- [ ] Screen shake on hit (Tween + Camera2D offset)
-- [ ] Vignette overlay
-- [ ] AnimatedSprite2D — walk / idle / death for player + enemies
-- [ ] CPUParticles2D — muzzle flash + death burst
-- [ ] Full SFX implementation
-
-### Month 3 — Polish & Ship
-- [ ] Globals.gd autoload — persistent state across scenes
-- [ ] Level 1 complete and playable
-- [ ] Level 2 complete and playable
-- [ ] Level 3 complete and playable
-- [ ] Crawler enemy type
-- [ ] Lurker enemy type
-- [ ] Godot profiler audit — 60fps stable on Level 3
-- [ ] Bullet object pool (BulletPool.gd)
-- [ ] Debug overlay (F1 toggle)
-- [ ] Zero critical bugs across all levels
-- [ ] HTML5 export — runs in browser
-- [ ] Windows export — .exe builds
-- [ ] Itch.io page live
-- [ ] Playtest with 3+ real users
-- [ ] Top playtest fixes implemented
-- [ ] Title screen art
-- [ ] Win screen + credits
-- [ ] Post-mortem written
-- [ ] **v1.0 shipped**
+### Not started
+- [ ] Levels 2–5
+- [ ] Boss enemy
+- [ ] Touch aim/shoot controls (joystick covers movement only so far)
+- [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
+- [ ] Input rebinding menu
+- [ ] Real art/sound assets (everything is placeholder shapes + silent hooks)
+- [ ] HTML5 / Windows exports, Itch.io page
+- [ ] Playtesting pass
 
 ---
 
 ## Asset Credits
 
-*Update this section as assets are sourced.*
-
 | Asset | Source | License |
 |---|---|---|
 | Dungeon tiles, characters, items (`assets/sprites/dungeon/`) | [Kenney — Scribble Dungeons](https://kenney.nl/assets/scribble-dungeons) | CC0 |
-| Placeholder sprites (everything not yet reskinned) | [Kenney.nl](https://kenney.nl) | CC0 |
+| Placeholder sprites (everything not yet reskinned — player/enemy silhouettes, powerup icons, etc.) | Built procedurally / flat shapes, no external asset | — |
 | Sound effects | [freesound.org](https://freesound.org) | Various (log each file) |
 | Ambient music | TBD | TBD |
 
@@ -296,44 +279,37 @@ Track build progress here. Check off as each system is completed.
 
 ---
 
-## Development Roadmap
+## Status & Roadmap
 
-```
-Jul 08 ──► Aug 04    Month 1: Foundations
-Aug 05 ──► Sep 01    Month 2: Core Systems  
-Sep 02 ──► Sep 30    Month 3: Polish & Ship
+The original plan was a 3-month, 5-level solo horror game shipping by September 30, 2026. That date has passed, and the scope has grown well beyond the original plan — most notably the addition of a whole second game mode (local split-screen Versus with unique powers) that wasn't part of the initial design. There's no fixed ship date right now; development is ongoing and scope is still being actively shaped based on playtesting feedback.
 
-Target ship date: September 30, 2026
-Platform: Itch.io (HTML5 primary, Windows secondary)
-Version: v1.0
-```
+**What actually exists today:** a fully playable Solo arena and a fully playable 2-player local Versus arena, both with real mechanics (not just placeholders) — flashlight/darkness, stealth detection, pathfinding, powerups, fireplaces, audio hooks throughout, and mobile-friendly touch movement. **What's missing** is additional level content (2–5, boss), real art/sound (currently all flat-shape placeholders and silent audio hooks), and export/ship logistics (HTML5/Windows builds, Itch.io page, playtesting).
 
-### Post-v1.0 Ideas *(do not touch until v1.0 is shipped)*
-- Boss enemy for Level 5
-- Flashlight battery mechanic (horror difficulty modifier)
+### Ideas under consideration (not committed)
+- Touch aim/shoot controls to make Versus fully mobile-playable
+- Letting Versus players choose their power before a match instead of a fixed assignment
+- A co-op mode (two players vs. AI monsters together) — the shared-midpoint `arena_camera.gd` was built with this in mind
 - Procedurally generated levels
-- Simple controller support
-- Mobile port (touch controls)
+- Boss enemy for a later level
 
 ---
 
 ## How to Run
 
-### In the Editor
-1. Download [Godot 4.x stable](https://godotengine.org/download)
+### Quickest: `run.bat` (no Godot editor needed)
+1. Double-click `run.bat` at the project root.
+2. First time only: if it can't find a `godot/Godot.exe` next to it, download the standard (non-.NET) Godot 4.x build from [godotengine.org/download](https://godotengine.org/download), rename it to `Godot.exe`, and drop it in a `godot/` folder next to `run.bat`.
+3. It launches straight into the game — no editor UI.
+
+### In the Godot Editor
+1. Download [Godot 4.x stable](https://godotengine.org/download) (4.7.x is what this project is built/tested against)
 2. Clone or download this repository
 3. Open Godot → Import Project → select the `project.godot` file
 4. Press `F5` to run
 
-### HTML5 (Browser)
-1. Export via **Project → Export → HTML5**
-2. Serve locally: `python -m http.server` inside the export folder
-3. Open `http://localhost:8000` in browser
-
-### Windows
-1. Export via **Project → Export → Windows Desktop**
-2. Run `VOIDLIGHT.exe`
+### HTML5 / Windows exports
+Not set up yet — see [Status & Roadmap](#status--roadmap).
 
 ---
 
-*VOIDLIGHT — built in Godot 4.x — Chief — 2026*
+*VOIDLIGHT — built in Godot 4.7.x — Chief — 2026*
