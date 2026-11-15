@@ -7,8 +7,8 @@ extends Control
 @onready var p1_viewport: SubViewport = $VBox/P1Container/P1Viewport
 @onready var p2_viewport: SubViewport = $VBox/P2Container/P2Viewport
 @onready var p2_camera: Camera2D = $VBox/P2Container/P2Viewport/P2Camera
-@onready var player1: CharacterBody2D = $VBox/P1Container/P1Viewport/Player1
-@onready var player2: CharacterBody2D = $VBox/P1Container/P1Viewport/Player2
+@onready var player1: Player = $VBox/P1Container/P1Viewport/Player1
+@onready var player2: Player = $VBox/P1Container/P1Viewport/Player2
 @onready var nav_region: NavigationRegion2D = $VBox/P1Container/P1Viewport/NavRegion
 
 @onready var p1_hp_bar: ProgressBar = $P1HUD/HPBar
@@ -31,6 +31,7 @@ func _ready() -> void:
 	# disconnected copies.
 	p2_viewport.world_2d = p1_viewport.world_2d
 	_bake_navigation()
+	_apply_power_selection()
 
 	p1_hp_bar.max_value = player1.hp
 	p1_hp_bar.value = player1.hp
@@ -53,6 +54,23 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if is_instance_valid(player2):
 		p2_camera.global_position = player2.global_position
+
+
+## Reads the lobby's choices (power_select.gd writes Globals.selected_
+## power_p1/p2) and configures each player's power accordingly. Loading
+## this arena directly (skipping the lobby) still works — Globals defaults
+## to a sane pair of powers on its own.
+func _apply_power_selection() -> void:
+	_configure_power(player1, Globals.selected_power_p1)
+	_configure_power(player2, Globals.selected_power_p2)
+
+
+func _configure_power(player: Player, power_key: String) -> void:
+	var def: Dictionary = Globals.POWER_DEFS.get(power_key, Globals.POWER_DEFS[Globals.DEFAULT_POWER_P1])
+	player.power_effect = power_key
+	player.power_duration = def["duration"]
+	player.power_strength = def["strength"]
+	player.power_cooldown = def["cooldown"]
 
 
 func _bake_navigation() -> void:
