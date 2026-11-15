@@ -2,10 +2,10 @@
 
 > *You can only see as far as your light allows. But they can hear everything.*
 
-A 2D top-down horror game built in Godot 4.x, now with two ways to play: a **Solo** survival mode (clear a dark, monster-filled arena and reach the exit) and a **Versus** mode (two players, one device, split-screen, hunting each other with a flashlight, a gun, and a unique power each).
+A 2D top-down arena game built in Godot 4.x. Two modes are built and playable today — **Solo** survival (clear a dark, monster-filled arena and reach the exit) and **Versus** (two players, one device, split-screen PvP) — and the active design direction is a **web-based multiplayer arena shooter**: bright, colorful, up to 5 players per match (or 2–3v2–3 teams), each picking one of several unique superpowers, playable in a browser on desktop or mobile. See [Next: Web Multiplayer Arena](#next-web-multiplayer-arena-active-design) for where this is headed.
 
 Developer: **Sonpon Ye-shua Chief** | Engine: **Godot 4.7.x** | Language: **GDScript**
-Target Platform: **Itch.io (HTML5 + Windows)**, designed to also work on touchscreens
+Target Platform: **Web (HTML5)** first — playable in-browser on desktop and mobile — plus Itch.io (Windows secondary)
 
 ---
 
@@ -13,6 +13,7 @@ Target Platform: **Itch.io (HTML5 + Windows)**, designed to also work on touchsc
 
 - [Concept](#concept)
 - [Game Modes](#game-modes)
+- [Next: Web Multiplayer Arena (Active Design)](#next-web-multiplayer-arena-active-design)
 - [Controls](#controls)
 - [Mechanics](#mechanics)
 - [Powerups](#powerups)
@@ -43,6 +44,62 @@ Enter an open arena full of scattered crate cover and AI-controlled monsters. Ki
 Two players, one device, **no shared camera** — the screen splits top/bottom and each player only ever sees their own surroundings, exactly like they would playing alone. Same arena-with-cover philosophy as Solo, but larger, fully sealed (no entrance/exit — there's nothing to escape, just a fight), and PvP: your bullets hurt the other player, theirs hurt you. Each player gets one unique power on a cooldown (see [Powerups](#powerups)). Last player with HP left wins.
 
 Reachable from the main menu's **Versus (2 Player, Local)** button.
+
+---
+
+## Next: Web Multiplayer Arena (Active Design)
+
+This is the direction the game is actively moving in. It's a significant pivot from everything above, captured here while the details get nailed down — Solo and local Versus stay built and playable regardless of how this develops.
+
+### The core reversal: light stops being the default
+The original premise — the whole arena is dark, your flashlight is your only vision — is being **scrapped as the default state**. Matches are now **bright and colorful by default**: you can see the arena, the cover blocks, and other players clearly, all the time. Darkness becomes something that happens *to* a match temporarily, not the baseline.
+
+### Platform: web first, mobile-friendly
+- Primary export target becomes **HTML5**, played in a browser — desktop and mobile both.
+- Touch controls needed for mobile web play:
+  - ✅ Virtual joystick for movement — already built (`virtual_joystick.gd`)
+  - ❌ Drag-to-aim (moving your finger to turn/aim your character) — not built yet
+  - ❌ On-screen shoot button — not built yet
+
+### Scale & match structure
+- **Free-for-all:** up to 5 players per match
+- **Team mode:** 2–3 players per team
+- Designed to flex beyond those numbers later ("could still take any amount of players")
+- A large arena to actually support that many bodies and sightlines at once — bigger than either existing arena
+- Players with network trouble should **stay in the match, visually dimmed**, rather than being dropped — the match keeps going around them
+
+### Networking approach
+Godot's native multiplayer (ENet, raw UDP) **does not work in a browser** — that's a hard constraint, not a preference. For a web build, the real choice is:
+
+| Approach | How it works | Tradeoff |
+|---|---|---|
+| **WebSocket, client-server** *(recommended)* | One authoritative server; every browser connects to it over a normal WebSocket, using Godot's existing `SceneMultiplayer` + `WebSocketMultiplayerPeer` | Simple, well-supported, naturally gives you one place to implement "dim out a laggy player," anti-cheat, and room/team logic. Needs a server running somewhere continuously — a real hosting decision with an ongoing cost, not something that gets provisioned automatically. |
+| **WebRTC, peer-to-peer** | Players connect more directly via `WebRTCMultiplayerPeer` | Lower latency, but needs a signaling server *and* a TURN relay for players behind strict NATs — more infrastructure, not less, and harder to debug. |
+
+**Recommendation: WebSocket client-server**, built server-authoritative (the server decides actual positions/hits, clients predict locally and get corrected) — the standard pattern for exactly this kind of game, and what makes "smooth with no lag" and "handle a lot of concurrent players" realistic goals rather than hopes.
+
+### The Blackout power (where "the whole room is dark" goes)
+Instead of being the default, darkness becomes **one player's temporary power**: for about 15 seconds, the entire arena goes dark for everyone *except* the player who triggered it — only they get a flashlight for that window. Everyone else is suddenly blind in a normally-lit match. This directly reuses the existing `CanvasModulate`/`PointLight2D`/flashlight-cone systems already built for Solo mode — they just flip from "always on" to "one player's temporary ability."
+
+### Superpowers (working names — final terminology still TBD)
+Each player picks one superpower before a match starts; it charges up on a cooldown during play, same pattern the existing power-button/powerup-effect system already uses.
+
+| Working name | Effect | Open questions |
+|---|---|---|
+| **Camouflage** | Disguises as a maze/crate block — other players can't tell it's a player | Can it still move while disguised? Does it take damage if shot while camouflaged? |
+| **Bulwark (Shield)** | Projects a shield in front of the player, blocking incoming damage from that direction | Front-facing only, or a brief full-body shield like the existing Invincibility power? |
+| **Decoy** | Spawns an AI-controlled clone of the player that actively hunts a chosen target; can be destroyed | Reuses the existing enemy-chase AI pattern (`enemy.gd`'s HUNT state) adapted to target a player instead of always the nearest one |
+| **Heavy Gunner (Firepower)** | More damage and/or faster fire rate for a duration | — |
+| **Blackout** | Darkens the whole arena except the user, who alone gets a flashlight, for ~15s | Map-wide effect — only one of these should probably be active at a time |
+| **6th power — TBD** | — | Waiting on more detail/terminology |
+
+### Open decisions before deeper implementation
+These are the things worth pinning down before sinking real time into the networking layer, since getting them wrong costs real rework:
+1. **Where does the server run?** (hosting choice + ongoing cost — this doesn't get built around, it gets decided)
+2. **The 6th power**, and final names/terminology for all of them
+3. **Team-assignment UI** — how players end up on a team vs. FFA before a match starts
+4. **Custom art** — once sprite files are provided for how players should look, they slot into the existing placeholder-swap pattern (every visual in this project so far is a flat shape or procedural texture specifically so it can be swapped for real art later — same approach applies here)
+5. Whether Solo/local Versus stay as permanent separate offline modes, or eventually fold into the same arena content
 
 ---
 
@@ -281,13 +338,13 @@ VersusArena (Control, versus_manager.gd)
 
 ## Status & Roadmap
 
-The original plan was a 3-month, 5-level solo horror game shipping by September 30, 2026. That date has passed, and the scope has grown well beyond the original plan — most notably the addition of a whole second game mode (local split-screen Versus with unique powers) that wasn't part of the initial design. There's no fixed ship date right now; development is ongoing and scope is still being actively shaped based on playtesting feedback.
+The original plan was a 3-month, 5-level solo horror game shipping by September 30, 2026. That date has passed, and the scope has grown well beyond the original plan — first with local split-screen Versus, and now with a much bigger pivot toward a **web-based multiplayer arena shooter** (see [Next: Web Multiplayer Arena](#next-web-multiplayer-arena-active-design)). There's no fixed ship date; development is ongoing and scope is still actively being shaped.
 
-**What actually exists today:** a fully playable Solo arena and a fully playable 2-player local Versus arena, both with real mechanics (not just placeholders) — flashlight/darkness, stealth detection, pathfinding, powerups, fireplaces, audio hooks throughout, and mobile-friendly touch movement. **What's missing** is additional level content (2–5, boss), real art/sound (currently all flat-shape placeholders and silent audio hooks), and export/ship logistics (HTML5/Windows builds, Itch.io page, playtesting).
+**What actually exists today:** a fully playable Solo arena and a fully playable 2-player local Versus arena, both with real mechanics (not just placeholders) — flashlight/darkness, stealth detection, pathfinding, powerups, fireplaces, audio hooks throughout, and mobile-friendly touch *movement*. **What's missing** for those two modes: additional level content (2–5, boss), real art/sound, and export/ship logistics.
 
-### Ideas under consideration (not committed)
-- Touch aim/shoot controls to make Versus fully mobile-playable
-- Letting Versus players choose their power before a match instead of a fixed assignment
+**What's next (active design, not yet built):** the web multiplayer arena — real networking (WebSocket client-server, recommended), bright/colorful matches instead of always-dark, up to 5 players FFA or 2–3v2–3 teams, 6 selectable superpowers, touch aim/shoot controls, and graceful handling of laggy/disconnected players. Open decisions before deep implementation starts are listed in that section (server hosting, final power roster, team-assignment UI).
+
+### Other ideas under consideration (not committed)
 - A co-op mode (two players vs. AI monsters together) — the shared-midpoint `arena_camera.gd` was built with this in mind
 - Procedurally generated levels
 - Boss enemy for a later level
