@@ -1,4 +1,5 @@
 extends CharacterBody2D
+class_name Player
 ## Player: movement, flashlight aim/rotation, shooting, HP, noise emission.
 ## Generates its own flashlight cone texture at runtime so no light-cookie
 ## art asset is required to test the core mechanic.
@@ -54,6 +55,11 @@ signal power_cooldown_changed(ratio: float)  # 0 = ready, 1 = just used
 @onready var light_toggle_audio: AudioStreamPlayer2D = $LightToggleAudio
 @onready var wall_bump_audio: AudioStreamPlayer2D = $WallBumpAudio
 @onready var camera: Camera2D = get_node_or_null("Camera2D")
+@onready var sprite_body: Polygon2D = get_node_or_null("Visual")
+@onready var sprite_head: Polygon2D = get_node_or_null("Head")
+@onready var disguise_sprite: Sprite2D = get_node_or_null("DisguiseSprite")
+
+const DECOY_SCENE: PackedScene = preload("res://scenes/enemies/decoy.tscn")
 
 var hp: int
 var ammo: int
@@ -61,12 +67,15 @@ var ammo: int
 var _noise_radius := 0.0
 var _light_on := true
 var _speed_multiplier := 1.0
+var _damage_multiplier := 1.0
 var _base_flashlight_range: float
 var _effect_expiry: Dictionary = {}  # effect name -> seconds remaining
 var _muzzle_flash_timer := 0.0
 var _wall_bump_cooldown := 0.0
 var _power_cooldown_timer := 0.0
 var _joystick: Control = null
+var _blackout_prev_modulate: Color
+var _blackout_dimmed_players: Array = []  # [player, prev_flashlight_enabled, prev_ambient_enabled]
 
 const WALL_BUMP_COOLDOWN := 0.4
 
@@ -211,7 +220,8 @@ func _shoot() -> void:
 	if player_index == 1:
 		Globals.ammo = ammo
 	ammo_changed.emit(ammo)
-	_bullet_pool().spawn(gun_point.global_position, Vector2.RIGHT.rotated(rotation), 1, team)
+	var damage: int = int(round(1 * _damage_multiplier))
+	_bullet_pool().spawn(gun_point.global_position, Vector2.RIGHT.rotated(rotation), damage, team)
 	if shoot_audio and shoot_audio.stream:
 		shoot_audio.play()
 	_fire_muzzle_flash()
@@ -298,11 +308,19 @@ func take_damage(amount: int = 1) -> void:
 		died.emit()
 
 
-## Generic timed powerup hook — Powerup (scripts/world/powerup.gd) calls this
-## on pickup with one of: "speed", "invincible", "light_boost". Picking up
-## the same effect again extends the remaining time rather than restarting
-## it short, so overlapping pickups stack usefully instead of fighting.
+## Generic timed powerup hook — Powerup (scripts/world/powerup.gd), or a
+## player's own power button, calls this with one of: "speed", "invincible"
+## (also stands in for the "Bulwark/Shield" superpower until it gets a real
+## directional-block mechanic of its own), "light_boost", "stealth",
+## "damage_boost" (Heavy Gunner), "camouflage", or "blackout". "decoy" is a
+## fire-and-forget spawn, not a duration effect, and is handled separately.
+## Picking up the same effect again extends the remaining time rather than
+## restarting it short, so overlapping pickups stack usefully.
 func apply_powerup(effect: String, duration: float, strength: float = 1.0) -> void:
+	if effect == "decoy":
+		_spawn_decoy()
+		return
+
 	var was_active := _has_effect(effect)
 	_effect_expiry[effect] = max(_effect_expiry.get(effect, 0.0), duration)
 	if was_active:
@@ -313,6 +331,12 @@ func apply_powerup(effect: String, duration: float, strength: float = 1.0) -> vo
 		"light_boost":
 			flashlight_range = _base_flashlight_range * strength
 			flashlight.texture_scale = flashlight_range / _TEX_RANGE
+		"damage_boost":
+			_damage_multiplier = strength
+		"camouflage":
+			_set_camouflaged(true)
+		"blackout":
+			_begin_blackout()
 
 
 func _has_effect(effect: String) -> bool:
@@ -336,6 +360,84 @@ func _end_effect(effect: String) -> void:
 		"light_boost":
 			flashlight_range = _base_flashlight_range
 			flashlight.texture_scale = flashlight_range / _TEX_RANGE
+		"damage_boost":
+			_damage_multiplier = 1.0
+		"camouflage":
+			_set_camouflaged(false)
+		"blackout":
+			_end_blackout()
+
+
+## Camouflage: looks like a crate instead of a player. Doesn't change
+## movement or collision — purely visual, since in PvP the only thing that
+## needs fooling is the other player's eyes, not a detection system.
+func _set_camouflaged(active: bool) -> void:
+	if sprite_body:
+		sprite_body.visible = not active
+	if sprite_head:
+		sprite_head.visible = not active
+	if disguise_sprite:
+		disguise_sprite.visible = active
+
+
+## Blackout: darkens the whole arena for everyone except the caster for the
+## effect's duration. Needs to reach outside this node entirely — the
+## arena's own ambient darkness (CanvasModulate, in the "world_canvas_
+## modulate" group) and every OTHER player's flashlight/ambient glow, since
+## a player's own PointLight2D would otherwise keep lighting their
+## surroundings regardless of how dark the world background goes.
+func _begin_blackout() -> void:
+	var modulate_node := get_tree().get_first_node_in_group("world_canvas_modulate") as CanvasModulate
+	if modulate_node:
+		_blackout_prev_modulate = modulate_node.color
+		modulate_node.color = Color(0.02, 0.02, 0.03, 1.0)
+
+	_blackout_dimmed_players.clear()
+	for node in get_tree().get_nodes_in_group("player"):
+		var other := node as Player
+		if other == null or other == self:
+			continue
+		_blackout_dimmed_players.append([other, other.flashlight.enabled, other.ambient_glow.enabled])
+		other.flashlight.enabled = false
+		other.ambient_glow.enabled = false
+
+	# The caster keeps full visibility regardless of their own toggle state.
+	flashlight.enabled = true
+
+
+func _end_blackout() -> void:
+	var modulate_node := get_tree().get_first_node_in_group("world_canvas_modulate") as CanvasModulate
+	if modulate_node:
+		modulate_node.color = _blackout_prev_modulate
+
+	for entry in _blackout_dimmed_players:
+		var other: Player = entry[0]
+		if is_instance_valid(other):
+			other.flashlight.enabled = entry[1]
+			other.ambient_glow.enabled = entry[2]
+	_blackout_dimmed_players.clear()
+
+	flashlight.enabled = _light_on
+
+
+## Decoy: spawns an AI clone (decoy.gd, an Enemy subclass) that relentlessly
+## hunts one specific opposing player — not the nearest one, a chosen one —
+## and can be killed like any other enemy. Fire-and-forget: it isn't tracked
+## as an ongoing effect on this player, it lives independently with its own
+## lifespan once spawned.
+func _spawn_decoy() -> void:
+	var target: Player = null
+	for node in get_tree().get_nodes_in_group("player"):
+		var other := node as Player
+		if other != null and other != self:
+			target = other
+			break
+	if target == null:
+		return
+	var decoy := DECOY_SCENE.instantiate() as Decoy
+	get_parent().add_child(decoy)
+	decoy.global_position = global_position
+	decoy.set_target(target)
 
 
 ## Last-stand tension cue: loops a heartbeat once the player is down to
