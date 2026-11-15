@@ -57,9 +57,10 @@ The original premise — the whole arena is dark, your flashlight is your only v
 ### Platform: web first, mobile-friendly
 - Primary export target becomes **HTML5**, played in a browser — desktop and mobile both.
 - Touch controls needed for mobile web play:
-  - ✅ Virtual joystick for movement — already built (`virtual_joystick.gd`)
-  - ❌ Drag-to-aim (moving your finger to turn/aim your character) — not built yet
-  - ❌ On-screen shoot button — not built yet
+  - ✅ Virtual joystick for movement — built (`virtual_joystick.gd`)
+  - ✅ Drag-to-aim — built (`touch_aim_pad.gd`): drag anywhere on the right side of the screen to aim; releasing holds the last direction instead of snapping to zero
+  - ✅ On-screen shoot button — built (`touch_shoot_button.gd`)
+  - All three are wired into the Solo HUD today (the live testbed, since the real multiplayer arena doesn't exist yet) and drop straight into that arena once it's built
 
 ### Scale & match structure
 - **Free-for-all:** up to 5 players per match
@@ -81,25 +82,28 @@ Godot's native multiplayer (ENet, raw UDP) **does not work in a browser** — th
 ### The Blackout power (where "the whole room is dark" goes)
 Instead of being the default, darkness becomes **one player's temporary power**: for about 15 seconds, the entire arena goes dark for everyone *except* the player who triggered it — only they get a flashlight for that window. Everyone else is suddenly blind in a normally-lit match. This directly reuses the existing `CanvasModulate`/`PointLight2D`/flashlight-cone systems already built for Solo mode — they just flip from "always on" to "one player's temporary ability."
 
-### Superpowers (working names — final terminology still TBD)
-Each player picks one superpower before a match starts; it charges up on a cooldown during play, same pattern the existing power-button/powerup-effect system already uses.
+### Superpowers — 5 of 6 implemented
+Each player picks one superpower in a lobby before a match starts (`power_select.gd`/`.tscn`); it charges up on a cooldown during play, the same pattern the pre-existing power-button/powerup-effect system already used. `Globals.POWER_DEFS` is the single source of truth for each power's duration/strength/cooldown, read by both the lobby and the match.
 
-| Working name | Effect | Open questions |
+| Working name | Effect | Status |
 |---|---|---|
-| **Camouflage** | Disguises as a maze/crate block — other players can't tell it's a player | Can it still move while disguised? Does it take damage if shot while camouflaged? |
-| **Bulwark (Shield)** | Projects a shield in front of the player, blocking incoming damage from that direction | Front-facing only, or a brief full-body shield like the existing Invincibility power? |
-| **Decoy** | Spawns an AI-controlled clone of the player that actively hunts a chosen target; can be destroyed | Reuses the existing enemy-chase AI pattern (`enemy.gd`'s HUNT state) adapted to target a player instead of always the nearest one |
-| **Heavy Gunner (Firepower)** | More damage and/or faster fire rate for a duration | — |
-| **Blackout** | Darkens the whole arena except the user, who alone gets a flashlight, for ~15s | Map-wide effect — only one of these should probably be active at a time |
-| **6th power — TBD** | — | Waiting on more detail/terminology |
+| **Camouflage** | Disguises as a crate — body/head hidden, a crate sprite shown instead; purely visual, doesn't change movement or collision | ✅ Built |
+| **Bulwark (Shield)** | Aliased to the existing Invincibility effect as a placeholder | ✅ Built (as a placeholder — a real directional-block mechanic is a possible follow-up) |
+| **Decoy** | Spawns an AI clone (`decoy.gd`, an `Enemy` subclass) that locks onto and relentlessly hunts one specific opposing player; can be killed like any enemy; expires after a lifespan | ✅ Built |
+| **Heavy Gunner (Firepower)** | Doubles bullet damage for the duration | ✅ Built |
+| **Blackout** | Darkens the whole arena for everyone *except* the caster for ~15s — the caster alone keeps a flashlight; reaches outside the player node to dim every other player's own flashlight/ambient glow too | ✅ Built |
+| **6th power — TBD** | — | ❌ Not yet named |
+
+### The power-selection lobby
+Reachable from the main menu's **Versus** button (replacing a direct jump into the arena). Each player picks one of the 5 named powers (a disabled "Coming Soon" slot marks the open 6th), plus an FFA/Team mode toggle — Team is currently disabled since local 2-player Versus can't yet represent 2–3-per-team, that needs the real networking layer. This is deliberately just the *selection logic*: plain buttons with a simple highlight, not the "press something, a ring of options pops out" visual that's planned as a separate pass on top of this same backend.
 
 ### Open decisions before deeper implementation
 These are the things worth pinning down before sinking real time into the networking layer, since getting them wrong costs real rework:
-1. **Where does the server run?** (hosting choice + ongoing cost — this doesn't get built around, it gets decided)
+1. **Where does the server run?** Researched: free hosting tiers that sleep-on-idle (Render, Railway) or have been discontinued don't work for an always-on game server. **Oracle Cloud's "Always Free" tier** is the one genuinely-permanent free option found — recommended starting point once the networking layer is ready to deploy.
 2. **The 6th power**, and final names/terminology for all of them
-3. **Team-assignment UI** — how players end up on a team vs. FFA before a match starts
+3. **Team-assignment UI visual** — the backend (mode toggle, per-player power picker) is built; the actual "pop-out" visual is explicitly left for later, to be built separately
 4. **Custom art** — once sprite files are provided for how players should look, they slot into the existing placeholder-swap pattern (every visual in this project so far is a flat shape or procedural texture specifically so it can be swapped for real art later — same approach applies here)
-5. Whether Solo/local Versus stay as permanent separate offline modes, or eventually fold into the same arena content
+5. Whether Solo/local Versus stay as permanent separate offline modes, or eventually fold into the same arena content — **decided for now: they stay separate**, untouched while work focuses on the web multiplayer pivot
 
 ---
 
@@ -130,11 +134,16 @@ Every action maps to a named input action in `project.godot`, so adding another 
 | Toggle flashlight | `P` |
 | Use unique power | `M` |
 
-Player 2 has no mouse to aim with (there's only one on the device), so they — and anyone on a touchscreen — aim by facing whichever direction they're moving, holding the last facing when stationary. Real analog-stick aim is a natural follow-up once there's gamepad hardware to test it against.
+Player 2 has no mouse to aim with (there's only one on the device), so they aim by facing whichever direction they're moving, holding the last facing when stationary, unless a touch aim pad is active for them (see below). Real analog-stick aim is a natural follow-up once there's gamepad hardware to test it against.
 
 **Gamepad:** move/shoot/sprint/toggle-light/power are all bound for two controllers (device 0 = player 1, device 1 = player 2), but there's no dedicated aim input yet — same movement-direction fallback as above applies.
 
-**Touch:** an on-screen virtual joystick (drag to move, releases to center) shows automatically on touchscreens, one per player via `touch_joystick_p1`/`touch_joystick_p2` groups. Shooting/aiming on touch isn't built yet — that's the next touch-control piece.
+**Touch:** three on-screen controls show automatically on touchscreens, one set per player via `touch_joystick_p1`/`touch_joystick_p2` and `touch_aim_p1`/`touch_aim_p2` group membership:
+- **Virtual joystick** (bottom-left) — drag to move, releases to center
+- **Aim pad** (drag anywhere on the right side of the screen) — sets aim direction; unlike the joystick, releasing does *not* reset to zero, it holds the last direction, since a player's facing can't be "undefined"
+- **Shoot button** (bottom-right) — fires while held, same as a mouse click or key
+
+Aim priority in `player.gd` is: a visible touch aim pad first, then mouse (player 1, desktop), then movement-direction facing (everyone else, or touch with no aim pad).
 
 ---
 
@@ -180,7 +189,7 @@ One reusable pickup script covers every type — each gets a distinct **shape** 
 | Light Boost | Sunburst | Flashlight range scales up (also increases how far enemies can spot you — it's a trade-off, not a free buff) |
 | Stealth | 4-point star | Completely unnoticeable — even point-blank with your light on — for a few seconds |
 
-In **Versus mode**, each player also has one of these as a built-in **unique power** on a cooldown (`Q`/`M` by default) — the exact same effect system a pickup uses, just button-triggered instead of walked over. Currently Player 1 gets Speed, Player 2 gets Stealth, as a first example of asymmetric powers; swapping which power goes to which player (or letting players choose) is just changing exported values on the scene.
+In **Versus mode**, each player also has one unique power on a cooldown (`Q`/`M` by default) — the exact same effect system a pickup uses, just button-triggered instead of walked over. These are the 5 superpowers from the [web multiplayer design](#next-web-multiplayer-arena-active-design) (Camouflage, Bulwark/Shield, Decoy, Heavy Gunner, Blackout), picked per-player in the pre-match lobby (`power_select.gd`/`.tscn`) rather than hardcoded — defaults apply if the arena is loaded directly, skipping the lobby.
 
 ---
 
@@ -240,7 +249,9 @@ World (Node2D, level_manager.gd)
 ├── ExitPortal (Area2D)
 └── HUD (CanvasLayer, hud.gd)
     ├── Minimap (Control, minimap.gd)  ← draws maze + dots, not a camera/viewport
-    └── Joystick (touch, virtual_joystick.gd)
+    ├── Joystick (touch, virtual_joystick.gd)    ← movement
+    ├── AimPad (touch, touch_aim_pad.gd)         ← drag-to-aim
+    └── ShootButton (touch, touch_shoot_button.gd)
 ```
 
 ### Versus arena (`arena_versus.tscn`)
@@ -267,26 +278,30 @@ VersusArena (Control, versus_manager.gd)
 
 | Autoload | Purpose |
 |---|---|
-| `Globals.gd` | Cross-scene state: current level, score, high score, lighter charges. HP/ammo are now **per-player** (on `player.gd`), mirrored into `Globals.player_hp`/`ammo` for player 1 only so nothing else that reads them breaks. |
+| `Globals.gd` | Cross-scene state: current level, score, high score, lighter charges. HP/ammo are now **per-player** (on `player.gd`), mirrored into `Globals.player_hp`/`ammo` for player 1 only so nothing else that reads them breaks. Also holds `POWER_DEFS` (the superpower duration/strength/cooldown table) and the lobby's selections (`match_mode`, `selected_power_p1`/`p2`). |
 | `BulletPool.gd` | Pre-instantiated bullet pool — no runtime instantiate/free. Also usable as a plain (non-autoload) node, which is exactly what `LocalBulletPool` does. |
 
 ### Key Scripts
 
 | Script | Responsibility |
 |---|---|
-| `player.gd` | Movement, aim, shooting, HP/ammo, flashlight + ambient glow, muzzle flash, wall-bump audio, timed-effect system (powerups), the power button, `player_index`-based input resolution (so one script serves both local players) |
+| `player.gd` | Movement, aim, shooting, HP/ammo, flashlight + ambient glow, muzzle flash, wall-bump audio, timed-effect system (powerups + the 5 superpowers), the power button, `player_index`-based input resolution (so one script serves both local players) |
 | `enemy.gd` | FSM base (IDLE/AWARE/HUNT/DEAD), line-of-sight detection, navmesh pathfinding, contact damage, audio hooks |
 | `walker.gd` / `crawler.gd` / `lurker.gd` | Enemy.gd subclasses — speed/teleport overrides only |
+| `decoy.gd` | Enemy.gd subclass for the Decoy superpower — locks onto one chosen player instead of the nearest, expires after a lifespan |
 | `bullet.gd` / `bullet_pool.gd` | Pooled projectile; damages enemies or a different-team player |
 | `maze.gd` | Builds floor/walls from a `PackedStringArray` text grid; also merges wall-run collision to avoid seam-tunneling, and seals an outer boundary so you can't wander off into the void |
 | `wall.gd` | Reusable wall prefab — one exported `size`, builds its own collision + occluder + art |
-| `powerup.gd` | Generic timed-effect pickup, one script for all 4 effect types |
+| `powerup.gd` | Generic timed-effect pickup, one script for all 4 solo-mode effect types |
 | `fireplace.gd` | Ignite/extinguish timer, ember glow, lighter-charge consumption |
 | `level_manager.gd` | Solo mode: kill tracking, exit, HUD/minimap wiring, navmesh baking |
-| `versus_manager.gd` | Versus mode: split-screen world sharing, per-player HUD, win condition, results screen |
+| `versus_manager.gd` | Versus mode: split-screen world sharing, per-player HUD, win condition, results screen, applies each player's lobby-selected power |
+| `power_select.gd` | Pre-match lobby: FFA/Team toggle, per-player power picker built from `Globals.POWER_DEFS`, writes the selections `versus_manager.gd` reads |
 | `arena_camera.gd` | A shared-midpoint camera (built, not currently used — Versus uses per-player cameras instead; kept for a possible future co-op mode) |
 | `hud.gd` / `minimap.gd` | Solo HUD/minimap — signal-driven, no direct Globals reads |
 | `virtual_joystick.gd` | Touch movement input, one instance per player via group membership |
+| `touch_aim_pad.gd` | Touch-drag aim input; holds last direction on release instead of resetting to zero |
+| `touch_shoot_button.gd` | On-screen fire button; raw touch handling (not engine `TouchScreenButton`) so it can use the same anchor-based layout as the rest of the HUD |
 
 ---
 
@@ -307,14 +322,19 @@ VersusArena (Control, versus_manager.gd)
 - [x] Generic powerup system (speed/invincibility/light-boost/stealth) with distinct shapes
 - [x] Fireplaces (temporary big light, limited charges, ember glow, minimap dot)
 - [x] Audio hooks for every major event (silent until streams are assigned)
-- [x] On-screen virtual joystick for touch
+- [x] On-screen virtual joystick for touch (movement)
+- [x] Touch-drag aim pad + on-screen shoot button
 - [x] Local split-screen Versus mode: per-player cameras, PvP damage, unique powers, win/results screen
+- [x] 5 of 6 superpowers implemented: Camouflage, Bulwark (placeholder), Decoy, Heavy Gunner, Blackout
+- [x] Power-selection lobby (FFA/Team toggle + per-player power picker) wired in from the main menu
 - [x] `run.bat` — double-click to play, no Godot editor needed
 
 ### Not started
 - [ ] Levels 2–5
 - [ ] Boss enemy
-- [ ] Touch aim/shoot controls (joystick covers movement only so far)
+- [ ] The 6th superpower (unnamed)
+- [ ] Real networking (WebSocket client-server) — the big remaining piece for the web multiplayer pivot
+- [ ] Team-assignment UI visual (the pop-out/radial look) — backend logic exists, visual layer doesn't
 - [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
 - [ ] Input rebinding menu
 - [ ] Real art/sound assets (everything is placeholder shapes + silent hooks)
@@ -340,9 +360,9 @@ VersusArena (Control, versus_manager.gd)
 
 The original plan was a 3-month, 5-level solo horror game shipping by September 30, 2026. That date has passed, and the scope has grown well beyond the original plan — first with local split-screen Versus, and now with a much bigger pivot toward a **web-based multiplayer arena shooter** (see [Next: Web Multiplayer Arena](#next-web-multiplayer-arena-active-design)). There's no fixed ship date; development is ongoing and scope is still actively being shaped.
 
-**What actually exists today:** a fully playable Solo arena and a fully playable 2-player local Versus arena, both with real mechanics (not just placeholders) — flashlight/darkness, stealth detection, pathfinding, powerups, fireplaces, audio hooks throughout, and mobile-friendly touch *movement*. **What's missing** for those two modes: additional level content (2–5, boss), real art/sound, and export/ship logistics.
+**What actually exists today:** a fully playable Solo arena and a fully playable 2-player local Versus arena, both with real mechanics (not just placeholders) — flashlight/darkness, stealth detection, pathfinding, powerups, fireplaces, audio hooks throughout, and full mobile touch controls (movement, aim, shoot). Versus mode now has 5 of the 6 planned superpowers implemented (Camouflage, Bulwark, Decoy, Heavy Gunner, Blackout) and a working pre-match lobby to pick them. **What's missing** for those two modes: additional level content (2–5, boss), real art/sound, and export/ship logistics.
 
-**What's next (active design, not yet built):** the web multiplayer arena — real networking (WebSocket client-server, recommended), bright/colorful matches instead of always-dark, up to 5 players FFA or 2–3v2–3 teams, 6 selectable superpowers, touch aim/shoot controls, and graceful handling of laggy/disconnected players. Open decisions before deep implementation starts are listed in that section (server hosting, final power roster, team-assignment UI).
+**What's next (active design, not yet built):** the real networking layer (WebSocket client-server, recommended — researched, not started) is the one big remaining piece of the web multiplayer pivot, plus the 6th superpower, the fancy team-assignment visual, and graceful handling of laggy/disconnected players once there's an actual network to disconnect from. Open decisions before deep implementation starts are listed in that section (server hosting — Oracle Cloud Always Free recommended — and final power roster).
 
 ### Other ideas under consideration (not committed)
 - A co-op mode (two players vs. AI monsters together) — the shared-midpoint `arena_camera.gd` was built with this in mind
