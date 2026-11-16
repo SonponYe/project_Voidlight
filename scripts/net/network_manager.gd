@@ -10,20 +10,38 @@ extends Node
 ##
 ## One process is the authoritative server (always peer id 1, by Godot's
 ## own multiplayer convention); every other process is a client connecting
-## to it. See net_arena.gd/net_player.gd for what actually happens once a
-## connection succeeds — this autoload only owns the connection itself and
-## the roster of who's connected.
+## to it. This autoload owns the connection, the roster of who's connected
+## (with names), the player cap, and the scene-level match handshakes
+## (start match / arena ready / return to lobby). Those RPCs live HERE and
+## not on the lobby or arena because this is the one node that exists at
+## the same path (/root/Network) on every peer regardless of which scene
+## is currently loaded — an RPC aimed at a node the other side hasn't
+## loaded yet is silently dropped.
 
 signal player_list_changed
 signal connection_failed
 signal disconnected_from_server
+## Server turned us away (match full / already running). Fires right before
+## disconnected_from_server so the lobby can show the reason.
+signal rejected(reason: String)
+signal peer_arena_ready(id: int)
 
 const DEFAULT_PORT := 9050
+const MAX_PLAYERS := 5
+const MAX_NAME_LENGTH := 16
+const LOBBY_SCENE := "res://scenes/ui/net_lobby.tscn"
+const ARENA_SCENE := "res://scenes/net/net_arena.tscn"
 
-## peer_id -> { "name": String }. Server keeps every peer's entry; a client
-## only ever has its own entry (it doesn't need to know peer-list detail
-## beyond what net_arena.gd's spawner already tells it via spawned nodes).
+## peer_id -> { "name": String }. Server is the source of truth; clients
+## receive a full copy via _sync_players whenever it changes.
 var players: Dictionary = {}
+var local_name := "Player"
+var match_in_progress := false
+var last_reject_reason := ""
+
+## Server-only: peers whose arena scene is loaded and ready to receive
+## spawns. Cleared at every match start.
+var ready_peers: Dictionary = {}
 
 ## A WebSocketMultiplayerPeer is RefCounted — holding it here too (not just
 ## in multiplayer.multiplayer_peer) guards against it being freed out from
@@ -41,6 +59,26 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 
 
+func is_host() -> bool:
+	return multiplayer.has_multiplayer_peer() and multiplayer.is_server()
+
+
+func is_connected_to_match() -> bool:
+	return multiplayer.has_multiplayer_peer() \
+		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+
+
+func set_local_name(raw: String) -> void:
+	var cleaned := raw.strip_edges().substr(0, MAX_NAME_LENGTH)
+	local_name = cleaned if cleaned != "" else "Player"
+
+
+func player_name(id: int) -> String:
+	if players.has(id):
+		return players[id]["name"]
+	return "Player %d" % id
+
+
 ## Starts listening for WebSocket connections on `port`. The host process
 ## itself becomes peer id 1 and does NOT need a separate join() call.
 func host(port: int = DEFAULT_PORT) -> Error:
@@ -50,7 +88,9 @@ func host(port: int = DEFAULT_PORT) -> Error:
 		return err
 	_peer = peer
 	multiplayer.multiplayer_peer = peer
-	players[1] = {"name": "Host"}
+	match_in_progress = false
+	last_reject_reason = ""
+	players = {1: {"name": local_name}}
 	player_list_changed.emit()
 	return OK
 
@@ -66,6 +106,8 @@ func join(address: String, port: int = DEFAULT_PORT) -> Error:
 		return err
 	_peer = peer
 	multiplayer.multiplayer_peer = peer
+	match_in_progress = false
+	last_reject_reason = ""
 	return OK
 
 
@@ -75,22 +117,124 @@ func leave() -> void:
 		multiplayer.multiplayer_peer = null
 	_peer = null
 	players.clear()
+	ready_peers.clear()
+	match_in_progress = false
+	player_list_changed.emit()
 
+
+# ---------------------------------------------------------------------------
+# Match flow (host-driven)
+# ---------------------------------------------------------------------------
+
+## Host only. Locks the room and moves every peer into the arena.
+func start_match() -> void:
+	if not is_host():
+		return
+	match_in_progress = true
+	ready_peers.clear()
+	_load_scene.rpc(ARENA_SCENE)
+	_load_scene(ARENA_SCENE)
+
+
+## Host only. Brings every peer back to the lobby, connection intact.
+func return_to_lobby() -> void:
+	if not is_host():
+		return
+	match_in_progress = false
+	ready_peers.clear()
+	_load_scene.rpc(LOBBY_SCENE)
+	_load_scene(LOBBY_SCENE)
+
+
+## Clients call this from the arena's _ready() once their MultiplayerSpawner
+## exists, so the server knows it's safe to send them spawns. A spawn sent
+## to a peer whose arena isn't loaded yet is lost, not queued.
+func report_arena_ready() -> void:
+	if is_host():
+		return
+	_arena_ready.rpc_id(1)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _load_scene(path: String) -> void:
+	match_in_progress = path == ARENA_SCENE
+	get_tree().change_scene_to_file(path)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _arena_ready() -> void:
+	if not is_host():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	ready_peers[id] = true
+	peer_arena_ready.emit(id)
+
+
+# ---------------------------------------------------------------------------
+# Roster
+# ---------------------------------------------------------------------------
+
+@rpc("any_peer", "call_remote", "reliable")
+func _register(raw_name: String) -> void:
+	if not is_host():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	var cleaned := raw_name.strip_edges().substr(0, MAX_NAME_LENGTH)
+	players[id] = {"name": cleaned if cleaned != "" else "Player %d" % id}
+	_broadcast_players()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _sync_players(roster: Dictionary) -> void:
+	players = roster
+	player_list_changed.emit()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rejected(reason: String) -> void:
+	last_reject_reason = reason
+	rejected.emit(reason)
+
+
+func _broadcast_players() -> void:
+	_sync_players.rpc(players)
+	player_list_changed.emit()
+
+
+func _reject_peer(id: int, reason: String) -> void:
+	_rejected.rpc_id(id, reason)
+	# Give the rejection RPC a moment to actually go out before closing the
+	# socket — disconnecting in the same frame can drop it unsent.
+	await get_tree().create_timer(0.3).timeout
+	if multiplayer.has_multiplayer_peer() and id in multiplayer.get_peers():
+		multiplayer.multiplayer_peer.disconnect_peer(id)
+
+
+# ---------------------------------------------------------------------------
+# Signal handlers
+# ---------------------------------------------------------------------------
 
 func _on_peer_connected(id: int) -> void:
-	if multiplayer.is_server():
-		players[id] = {"name": "Player %d" % id}
-		player_list_changed.emit()
+	if not is_host():
+		return
+	if match_in_progress:
+		_reject_peer(id, "Match already in progress")
+		return
+	if players.size() >= MAX_PLAYERS:
+		_reject_peer(id, "Match is full (%d players)" % MAX_PLAYERS)
+		return
+	# Roster entry is created when the client sends _register with its name.
 
 
 func _on_peer_disconnected(id: int) -> void:
-	players.erase(id)
-	player_list_changed.emit()
+	if is_host():
+		players.erase(id)
+		ready_peers.erase(id)
+		_broadcast_players()
 
 
 func _on_connected_to_server() -> void:
-	players[multiplayer.get_unique_id()] = {"name": "You"}
-	player_list_changed.emit()
+	_register.rpc_id(1, local_name)
 
 
 func _on_connection_failed() -> void:
@@ -103,4 +247,5 @@ func _on_server_disconnected() -> void:
 	multiplayer.multiplayer_peer = null
 	_peer = null
 	players.clear()
+	match_in_progress = false
 	disconnected_from_server.emit()
