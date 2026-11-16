@@ -45,6 +45,9 @@ Two players, one device, **no shared camera** — the screen splits top/bottom a
 
 Reachable from the main menu's **Versus (2 Player, Local)** button.
 
+### Online (first playable version)
+Reachable from the main menu's **Online (Multiplayer)** button. One player hosts, the others join by the host's IP, everyone waits in a room showing who's in (names, host tag, up to 5 players), and the host starts the match. The arena is a plain, bright, sealed box with no cover: last player standing wins, the winner is announced to everyone, eliminated players spectate, and the host can send the whole room back to the lobby for another round without anyone reconnecting. No Gens, darkness, or cover yet — this is the "can I actually play online with a friend" milestone the rest of the design builds on. Mobile touch controls (joystick, aim pad, shoot button) are wired in.
+
 ---
 
 ## Next: Web Multiplayer Arena (Active Design)
@@ -308,9 +311,11 @@ VersusArena (Control, versus_manager.gd)
 | `virtual_joystick.gd` | Touch movement input, one instance per player via group membership |
 | `touch_aim_pad.gd` | Touch-drag aim input; holds last direction on release instead of resetting to zero |
 | `touch_shoot_button.gd` | On-screen fire button; raw touch handling (not engine `TouchScreenButton`) so it can use the same anchor-based layout as the rest of the HUD |
-| `network_manager.gd` *(autoload: `Network`)* | Owns the actual WebSocket connection (`WebSocketMultiplayerPeer`), host/join/leave, and the connected-peer roster. Doesn't know about gameplay — `net_arena.gd`/`net_player.gd` build on top of it |
-| `net_arena.gd` | The networked arena's spawn/despawn logic — `MultiplayerSpawner`-driven, server decides who gets spawned where and for whom |
-| `net_player.gd` *(`NetPlayer`)* | Server-authoritative networked player: server simulates movement/position from received input and owns hit detection, the owning client also predicts its own movement locally for responsiveness (no reconciliation smoothing yet — corrections can visibly snap). Deliberately minimal: no Gens, no flashlight, no HUD yet — those layer on once this core loop is proven solid |
+| `network_manager.gd` *(autoload: `Network`)* | Owns the WebSocket connection (`WebSocketMultiplayerPeer`), host/join/leave, the named roster (synced server → clients), the 5-player cap with a rejection reason, and the scene-level match RPCs (start match, arena-ready handshake, return to lobby). Those RPCs live here because the autoload is the one node at the same path on every peer regardless of scene |
+| `net_lobby.gd` | Online lobby: name + host-IP form, host/join, waiting room with the live roster, host-only Start. Lands straight back in the room after a match since the connection stays up |
+| `net_arena.gd` | The online match (host-authoritative): waits for every client to report its arena loaded before spawning anyone (a spawn sent to a peer without the arena is lost, not queued), spawns via `MultiplayerSpawner`, tracks eliminations/leavers, declares the winner, broadcasts status/announcements, and despawns cleanly before sending everyone back to the lobby |
+| `net_player.gd` *(`NetPlayer`)* | Server-authoritative networked player: server simulates remote movement from received input and owns hit detection (its own position, not a client-supplied one; server-enforced fire cooldown); the owning client predicts its own movement locally (no reconciliation yet — corrections can snap). Mouse or touch-pad aim, visible tracers, name tag, per-player color, dimmed death state. No Gens or flashlight yet |
+| `net_hud.gd` | Online HUD: HP, alive count, status line, timed announcements, the touch controls, and the end-of-match overlay (Return to Lobby for the host, Leave for everyone) |
 
 ---
 
@@ -336,7 +341,8 @@ VersusArena (Control, versus_manager.gd)
 - [x] Local split-screen Versus mode: per-player cameras, PvP damage, unique Gens, win/results screen
 - [x] 5 of 6 Gens implemented: Camouflage, Shield (placeholder), Decoy, Heavy Gunner/Poltergeist (old mechanic, rename pending), Blackout
 - [x] Gen-selection lobby (FFA/Team toggle + per-player Gen picker) wired in from the main menu
-- [x] A real WebSocket client-server networking prototype (`Network` autoload, `NetPlayer`/`NetArena`) — server-authoritative movement + hit detection, verified end-to-end across separate processes; not yet wired to any real match/arena content
+- [x] Real WebSocket client-server networking (`Network` autoload, `NetPlayer`/`NetArena`) — server-authoritative movement + hit detection
+- [x] First playable online match: host/join lobby with named roster and 5-player cap, arena-ready handshake, eliminations → winner → results → back to lobby, net HUD with touch controls — verified end-to-end across three separate processes (host + 2 clients)
 - [x] `run.bat` — double-click to play, no Godot editor needed
 
 ### Not started
@@ -348,8 +354,12 @@ VersusArena (Control, versus_manager.gd)
 - [ ] Poltergeist's tracking/tagging rework (currently still the old Heavy Gunner damage-boost effect)
 - [ ] Blackout's night-vision caster visual + duration bump from 15s to 30s
 - [ ] Limited player-vision-range implementation (map always visible, other players only visible in-range/in-view, no default long-range player tracking)
-- [ ] Wiring the Gen system, HUD, and touch controls into the new networked `NetPlayer`/`NetArena` (currently minimal, no powers yet by design)
-- [ ] Resolving an intermittent WebSocket disconnect seen during local multi-process testing (not yet root-caused — needs testing outside a heavily-loaded headless CLI harness)
+- [ ] Wiring the Gen system, cover blocks, and the darkness/flashlight system into the online arena (currently a bare lit box by design)
+- [ ] Online team mode (team assignment, friendly-fire rules) — FFA only for now
+- [ ] Movement smoothing online: reconciliation for your own avatar, interpolation for everyone else's
+- [ ] Laggy/disconnected players staying in the match dimmed instead of being removed
+- [ ] Matchmaking / room codes — joining is by the host's IP address for now
+- [ ] Confirming the earlier intermittent WebSocket disconnect is gone — it did not appear in any of this session's three-process runs, but still needs a check on real exported builds
 - [ ] Team-assignment UI visual (the pop-out/radial look) — backend logic exists, visual layer doesn't
 - [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
 - [ ] Input rebinding menu
@@ -378,7 +388,7 @@ The original plan was a 3-month, 5-level solo horror game shipping by September 
 
 **What actually exists today:** a fully playable Solo arena and a fully playable 2-player local Versus arena, both with real mechanics (not just placeholders) — flashlight/darkness, stealth detection, pathfinding, powerups, fireplaces, audio hooks throughout, and full mobile touch controls (movement, aim, shoot). Versus mode now has 5 of the 6 planned Gens implemented (Camouflage, Shield, Decoy, Heavy Gunner/Poltergeist, Blackout — some with reworked designs not yet coded, see [Gens](#gens--the-renamed-reworked-power-system-5-of-6-implemented)) and a working pre-match lobby to pick them. **What's missing** for those two modes: additional level content (2–5, boss), real art/sound, and export/ship logistics.
 
-**Networking has a first working prototype:** a real WebSocket client-server layer (`Network` autoload + `NetPlayer`/`NetArena`) exists and has been verified end-to-end — connect, spawn, server-authoritative movement, server-validated hit detection, replicated back to every peer — across genuinely separate OS processes, not just in-editor testing. It's deliberately minimal (no Gens, no HUD, no cover yet) so the core loop could be proven solid first. One open issue: an intermittent WebSocket disconnect showed up during repeated local multi-process testing, not yet root-caused; next step is testing it under normal conditions (an exported build or two editor instances) instead of a heavily-loaded headless CLI harness.
+**Online play has its first playable version:** a real WebSocket client-server layer (`Network` autoload + `NetPlayer`/`NetArena`) with a host/join lobby, a named roster, a 5-player cap, a full match loop (spawn, eliminations, winner announced, results screen, back to the lobby for another round) and a HUD with touch controls — all verified end-to-end across three genuinely separate OS processes (a host and two clients), not just in-editor. It's deliberately a bare, lit, cover-free box so the loop could be proven solid before the design layers on. The intermittent disconnect seen in earlier prototype testing did not reappear in any of this session's runs, but it still needs confirming on real exported builds.
 
 **What's next (active design):** wiring the Gen system into the networked arena, finishing each Gen's reworked mechanic (Camouflage's attack-lock, Shield's real degrade-and-break behavior, Poltergeist's tracking rework, Blackout's night-vision visual + 30s duration), building **Bomb Voyage** (the newly-named and designed 6th Gen) from scratch, implementing the new limited-vision rule, the fancy team-assignment visual, and graceful handling of laggy/disconnected players. Open decisions before deeper implementation are listed in that section (server hosting — Oracle Cloud Always Free recommended — and vision-range tuning).
 
