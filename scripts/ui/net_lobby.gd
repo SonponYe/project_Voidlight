@@ -1,0 +1,148 @@
+extends Control
+## Online lobby: host a room or join one by address, then wait in the room
+## until the host starts the match. Bare-bones on purpose — no matchmaking,
+## no room codes, no Gen picking yet. Those layer onto this once a real
+## online match is playable end to end.
+
+@export_file("*.tscn") var main_menu_path := "res://scenes/ui/main_menu.tscn"
+
+@onready var connect_panel: VBoxContainer = $VBox/ConnectPanel
+@onready var room_panel: VBoxContainer = $VBox/RoomPanel
+@onready var name_edit: LineEdit = $VBox/ConnectPanel/NameRow/NameEdit
+@onready var address_edit: LineEdit = $VBox/ConnectPanel/AddressRow/AddressEdit
+@onready var host_button: Button = $VBox/ConnectPanel/ButtonRow/HostButton
+@onready var join_button: Button = $VBox/ConnectPanel/ButtonRow/JoinButton
+@onready var status_label: Label = $VBox/StatusLabel
+@onready var room_title: Label = $VBox/RoomPanel/RoomTitle
+@onready var player_list: VBoxContainer = $VBox/RoomPanel/PlayerList
+@onready var start_button: Button = $VBox/RoomPanel/RoomButtons/StartButton
+@onready var leave_button: Button = $VBox/RoomPanel/RoomButtons/LeaveButton
+
+var _connecting := false
+
+
+func _ready() -> void:
+	name_edit.text = Network.local_name
+	Network.player_list_changed.connect(_refresh_room)
+	Network.connection_failed.connect(_on_connection_failed)
+	Network.disconnected_from_server.connect(_on_disconnected)
+	Network.rejected.connect(_on_rejected)
+	multiplayer.connected_to_server.connect(_on_connected)
+
+	# Coming back from a match keeps the connection alive, so land straight
+	# in the room instead of the connect form.
+	if Network.is_connected_to_match():
+		_show_room()
+	else:
+		_show_connect("")
+
+
+func _exit_tree() -> void:
+	if Network.player_list_changed.is_connected(_refresh_room):
+		Network.player_list_changed.disconnect(_refresh_room)
+	if Network.connection_failed.is_connected(_on_connection_failed):
+		Network.connection_failed.disconnect(_on_connection_failed)
+	if Network.disconnected_from_server.is_connected(_on_disconnected):
+		Network.disconnected_from_server.disconnect(_on_disconnected)
+	if Network.rejected.is_connected(_on_rejected):
+		Network.rejected.disconnect(_on_rejected)
+	if multiplayer.connected_to_server.is_connected(_on_connected):
+		multiplayer.connected_to_server.disconnect(_on_connected)
+
+
+func _show_connect(message: String) -> void:
+	_connecting = false
+	connect_panel.visible = true
+	room_panel.visible = false
+	host_button.disabled = false
+	join_button.disabled = false
+	status_label.text = message
+
+
+func _show_room() -> void:
+	_connecting = false
+	connect_panel.visible = false
+	room_panel.visible = true
+	start_button.visible = Network.is_host()
+	_refresh_room()
+
+
+func _refresh_room() -> void:
+	if not room_panel.visible:
+		return
+	for child in player_list.get_children():
+		child.queue_free()
+	var ids := Network.players.keys()
+	ids.sort()
+	for id in ids:
+		var label := Label.new()
+		var tag := ""
+		if id == 1:
+			tag = "  (host)"
+		if id == multiplayer.get_unique_id():
+			tag += "  (you)"
+		label.text = "%s%s" % [Network.player_name(id), tag]
+		player_list.add_child(label)
+	room_title.text = "ROOM  —  %d / %d players" % [ids.size(), Network.MAX_PLAYERS]
+	if Network.is_host():
+		var enough := ids.size() >= 2
+		start_button.disabled = not enough
+		status_label.text = "Press Start when everyone's in." if enough else "Waiting for at least one more player..."
+	else:
+		status_label.text = "Waiting for the host to start the match..."
+
+
+func _on_host_pressed() -> void:
+	Network.set_local_name(name_edit.text)
+	var err := Network.host()
+	if err != OK:
+		_show_connect("Couldn't host on port %d (error %d). Is another game already hosting?" % [Network.DEFAULT_PORT, err])
+		return
+	_show_room()
+
+
+func _on_join_pressed() -> void:
+	Network.set_local_name(name_edit.text)
+	var address := address_edit.text.strip_edges()
+	if address == "":
+		_show_connect("Enter the host's address first.")
+		return
+	var err := Network.join(address)
+	if err != OK:
+		_show_connect("Couldn't start connecting (error %d)." % err)
+		return
+	_connecting = true
+	host_button.disabled = true
+	join_button.disabled = true
+	status_label.text = "Connecting to %s..." % address
+
+
+func _on_connected() -> void:
+	_show_room()
+
+
+func _on_connection_failed() -> void:
+	_show_connect("Couldn't reach %s. Check the address and that the host is running." % address_edit.text.strip_edges())
+
+
+func _on_rejected(reason: String) -> void:
+	status_label.text = reason
+
+
+func _on_disconnected() -> void:
+	var reason := Network.last_reject_reason
+	_show_connect(reason if reason != "" else "Disconnected from host.")
+
+
+func _on_start_pressed() -> void:
+	Network.start_match()
+
+
+func _on_leave_pressed() -> void:
+	Network.leave()
+	_show_connect("")
+
+
+func _on_back_pressed() -> void:
+	Network.leave()
+	get_tree().change_scene_to_file(main_menu_path)
