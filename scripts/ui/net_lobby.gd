@@ -19,6 +19,11 @@ extends Control
 @onready var leave_button: Button = $VBox/RoomPanel/RoomButtons/LeaveButton
 @onready var gen_row: HBoxContainer = $VBox/RoomPanel/GenRow
 @onready var gen_blurb: Label = $VBox/RoomPanel/GenBlurb
+@onready var ffa_button: Button = $VBox/RoomPanel/ModeRow/FFAButton
+@onready var team_mode_button: Button = $VBox/RoomPanel/ModeRow/TeamButton
+@onready var team_row: HBoxContainer = $VBox/RoomPanel/TeamRow
+@onready var team_a_button: Button = $VBox/RoomPanel/TeamRow/TeamAButton
+@onready var team_b_button: Button = $VBox/RoomPanel/TeamRow/TeamBButton
 
 const SELECTED_TINT := Color(1.3, 1.2, 0.7)
 const UNSELECTED_TINT := Color(1, 1, 1)
@@ -101,10 +106,12 @@ func _refresh_room() -> void:
 	if not room_panel.visible:
 		return
 	_refresh_gen_buttons()
+	_refresh_mode_buttons()
 	for child in player_list.get_children():
 		child.queue_free()
 	var ids := Network.players.keys()
 	ids.sort()
+	var team_counts := {1: 0, 2: 0}
 	for id in ids:
 		var label := Label.new()
 		var tag := ""
@@ -112,15 +119,58 @@ func _refresh_room() -> void:
 			tag = "  (host)"
 		if id == multiplayer.get_unique_id():
 			tag += "  (you)"
-		label.text = "%s  —  %s%s" % [Network.player_name(id), Gens.label(Network.player_gen(id)), tag]
+		var side := ""
+		if Network.is_team_mode():
+			var team := Network.player_team(id)
+			side = "[%s]  " % ("A" if team == 1 else "B")
+			if team_counts.has(team):
+				team_counts[team] += 1
+		label.text = "%s%s  —  %s%s" % [side, Network.player_name(id), Gens.label(Network.player_gen(id)), tag]
 		player_list.add_child(label)
 	room_title.text = "ROOM  —  %d / %d players" % [ids.size(), Network.MAX_PLAYERS]
 	if Network.is_host():
 		var enough := ids.size() >= 2
+		if Network.is_team_mode():
+			enough = team_counts[1] > 0 and team_counts[2] > 0
 		start_button.disabled = not enough
-		status_label.text = "Press Start when everyone's in." if enough else "Waiting for at least one more player..."
+		if enough:
+			status_label.text = "Press Start when everyone's in."
+		elif Network.is_team_mode():
+			status_label.text = "Both teams need at least one player."
+		else:
+			status_label.text = "Waiting for at least one more player..."
 	else:
 		status_label.text = "Waiting for the host to start the match..."
+
+
+func _refresh_mode_buttons() -> void:
+	var host := Network.is_host()
+	ffa_button.disabled = not host
+	team_mode_button.disabled = not host
+	var team_mode := Network.is_team_mode()
+	ffa_button.modulate = UNSELECTED_TINT if team_mode else SELECTED_TINT
+	team_mode_button.modulate = SELECTED_TINT if team_mode else UNSELECTED_TINT
+	team_row.visible = team_mode
+	if team_mode:
+		var mine := Network.player_team(multiplayer.get_unique_id())
+		team_a_button.modulate = SELECTED_TINT if mine == 1 else UNSELECTED_TINT
+		team_b_button.modulate = SELECTED_TINT if mine == 2 else UNSELECTED_TINT
+
+
+func _on_ffa_pressed() -> void:
+	Network.set_match_mode("ffa")
+
+
+func _on_team_mode_pressed() -> void:
+	Network.set_match_mode("team")
+
+
+func _on_team_a_pressed() -> void:
+	Network.select_team(1)
+
+
+func _on_team_b_pressed() -> void:
+	Network.select_team(2)
 
 
 func _on_host_pressed() -> void:

@@ -8,7 +8,12 @@ const PROXIMITY_COLOR := Color(1.0, 0.5, 0.2)
 const MANUAL_COLOR := Color(0.3, 0.6, 1.0)
 
 var owner_peer_id := 0
+var team := 0
 var manual := false
+
+
+func is_enemy(player: NetPlayer) -> bool:
+	return player.owner_peer_id != owner_peer_id and (team == 0 or player.team != team)
 
 
 func _draw() -> void:

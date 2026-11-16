@@ -38,6 +38,11 @@ const BLACKOUT_COLOR := Color(0.06, 0.06, 0.08)
 var _spawn_points := [
 	Vector2(96, 96), Vector2(1440, 96), Vector2(96, 928), Vector2(1440, 928), Vector2(800, 480),
 ]
+## Team mode: A spawns down the left edge, B down the right.
+var _team_spawn_points := {
+	1: [Vector2(96, 96), Vector2(96, 928), Vector2(96, 480)],
+	2: [Vector2(1440, 96), Vector2(1440, 928), Vector2(1440, 480)],
+}
 var _match_started := false
 var _match_over := false
 ## A match that started with a single player is a sandbox, never "won".
@@ -123,25 +128,37 @@ func _begin_match() -> void:
 func _spawn_for_peer(id: int) -> void:
 	if players_root.has_node(str(id)):
 		return
-	var data := {
-		"id": id,
-		"spawn": _participants.size() % _spawn_points.size(),
-		"gen": Network.player_gen(id),
-	}
+	var team := Network.player_team(id) if Network.is_team_mode() else 0
+	var pos: Vector2
+	if team != 0:
+		var slots: Array = _team_spawn_points[team]
+		pos = slots[_team_count(team) % slots.size()]
+	else:
+		pos = _spawn_points[_participants.size() % _spawn_points.size()]
+	var data := {"id": id, "pos": pos, "gen": Network.player_gen(id), "team": team}
 	var node := spawner.spawn(data) as NetPlayer
 	node.died.connect(_on_player_died)
 	_participants.append(id)
 
 
-## Runs on every peer with the same data, so the spawn slot and Gen travel
-## with it rather than being derived from server-only state.
+func _team_count(team: int) -> int:
+	var n := 0
+	for id in _participants:
+		if Network.player_team(id) == team:
+			n += 1
+	return n
+
+
+## Runs on every peer with the same data, so the spawn position, Gen and
+## team travel with it rather than being derived from server-only state.
 func _spawn_player(data: Dictionary) -> Node:
 	var scene: PackedScene = load(NET_PLAYER_SCENE)
 	var player := scene.instantiate() as NetPlayer
 	player.name = str(data["id"])
 	player.owner_peer_id = data["id"]
 	player.gen = data["gen"]
-	player.position = _spawn_points[data["spawn"]]
+	player.team = data["team"]
+	player.position = data["pos"]
 	player.configure_replication()
 	return player
 
@@ -180,12 +197,21 @@ func _check_win() -> void:
 	if not _match_started or _match_over or not _is_contest:
 		return
 	var alive := _alive_ids()
-	if alive.size() > 1:
-		return
-	_match_over = true
 	var text := "Nobody survived."
-	if alive.size() == 1:
-		text = "%s wins!" % Network.player_name(alive[0])
+	if Network.is_team_mode():
+		var teams_alive := {}
+		for id in alive:
+			teams_alive[Network.player_team(id)] = true
+		if teams_alive.size() > 1:
+			return
+		if teams_alive.size() == 1:
+			text = "%s wins!" % Network.team_name(teams_alive.keys()[0])
+	else:
+		if alive.size() > 1:
+			return
+		if alive.size() == 1:
+			text = "%s wins!" % Network.player_name(alive[0])
+	_match_over = true
 	_show_results.rpc(text)
 
 
@@ -226,7 +252,11 @@ func _update_blackout_visuals(me: NetPlayer) -> void:
 
 func place_bomb(owner_id: int, pos: Vector2, manual: bool) -> void:
 	_bomb_seq += 1
-	bomb_spawner.spawn({"id": _bomb_seq, "owner": owner_id, "pos": pos, "manual": manual})
+	var owner := players_root.get_node_or_null(str(owner_id)) as NetPlayer
+	bomb_spawner.spawn({
+		"id": _bomb_seq, "owner": owner_id, "team": owner.team if owner else 0,
+		"pos": pos, "manual": manual,
+	})
 
 
 func _spawn_bomb(data: Dictionary) -> Node:
@@ -234,6 +264,7 @@ func _spawn_bomb(data: Dictionary) -> Node:
 	var bomb := scene.instantiate() as NetBomb
 	bomb.name = "bomb_%d" % data["id"]
 	bomb.owner_peer_id = data["owner"]
+	bomb.team = data["team"]
 	bomb.manual = data["manual"]
 	bomb.position = data["pos"]
 	return bomb
@@ -250,19 +281,21 @@ func _server_check_bombs() -> void:
 		if not b is NetBomb or b.manual or b.is_queued_for_deletion():
 			continue
 		for p in players_root.get_children():
-			if p is NetPlayer and not p.dead and p.owner_peer_id != b.owner_peer_id \
+			if p is NetPlayer and not p.dead and b.is_enemy(p) \
 					and p.global_position.distance_to(b.global_position) <= BOMB_TRIGGER_RADIUS:
 				_explode(b)
 				break
 
 
+## Blasts hurt enemies and the owner themself — never teammates.
 func _explode(bomb: NetBomb) -> void:
 	if bomb.is_queued_for_deletion():
 		return
 	var pos := bomb.global_position
 	_explosion_fx.rpc(pos)
 	for p in players_root.get_children():
-		if p is NetPlayer and not p.dead and p.global_position.distance_to(pos) <= BOMB_BLAST_RADIUS:
+		if p is NetPlayer and not p.dead and (bomb.is_enemy(p) or p.owner_peer_id == bomb.owner_peer_id) \
+				and p.global_position.distance_to(pos) <= BOMB_BLAST_RADIUS:
 			p.apply_damage(BOMB_DAMAGE)
 	var owner := players_root.get_node_or_null(str(bomb.owner_peer_id)) as NetPlayer
 	if owner:
@@ -291,8 +324,9 @@ func _explosion_fx(pos: Vector2) -> void:
 ## The map is always visible; other players are not. You see an enemy only
 ## when they're close, or ahead of you inside your view cone, with nothing
 ## solid in between — or when they just gave themselves away by firing, or
-## you're haunting them with Poltergeist. Spectators (dead) see everyone.
-## Your own bombs are always visible to you and never to enemies.
+## you're haunting them with Poltergeist. Teammates are always visible.
+## Spectators (dead) see everyone. Your own bombs are always visible to
+## you and never to enemies.
 ## This is client-side culling: the server still replicates every position,
 ## so it's a presentation rule for now, not an anti-cheat one.
 func _update_vision(me: NetPlayer) -> void:
@@ -301,7 +335,8 @@ func _update_vision(me: NetPlayer) -> void:
 		if not p is NetPlayer or p == me:
 			continue
 		p.haunted = me != null and me.poltergeist_target == p.owner_peer_id
-		p.visible = spectating or p.haunted or _can_see(me, p)
+		var ally: bool = me != null and me.team != 0 and p.team == me.team
+		p.visible = spectating or ally or p.haunted or _can_see(me, p)
 	for b in bombs_root.get_children():
 		if b is NetBomb:
 			b.visible = spectating or b.owner_peer_id == me.owner_peer_id
@@ -358,12 +393,18 @@ func _local_player() -> NetPlayer:
 func _update_hud(me: NetPlayer) -> void:
 	var alive := 0
 	var total := 0
+	var team_alive := {1: 0, 2: 0}
 	for child in players_root.get_children():
 		if child is NetPlayer:
 			total += 1
 			if not child.dead:
 				alive += 1
-	hud.set_alive(alive, total)
+				if team_alive.has(child.team):
+					team_alive[child.team] += 1
+	if Network.is_team_mode():
+		hud.set_alive_text("Team A  %d   —   Team B  %d" % [team_alive[1], team_alive[2]])
+	else:
+		hud.set_alive(alive, total)
 	hud.set_gen(me)
 	if me:
 		hud.set_hp(me.hp, me.max_hp)

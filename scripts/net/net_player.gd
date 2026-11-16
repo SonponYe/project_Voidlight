@@ -24,6 +24,7 @@ const COLORS := [
 	Color(0.3, 0.8, 0.5), Color(0.9, 0.4, 0.3), Color(0.35, 0.6, 1.0),
 	Color(1.0, 0.8, 0.3), Color(0.8, 0.4, 0.9), Color(0.4, 0.9, 0.9),
 ]
+const TEAM_COLORS := {1: Color(0.35, 0.6, 1.0), 2: Color(0.95, 0.4, 0.3)}
 const AIM_SEND_INTERVAL := 0.05
 const TRACER_LIFETIME := 0.12
 
@@ -51,6 +52,8 @@ const DISGUISE_SIZE := 44.0
 ## input do I predict locally and whose requests do I accept."
 var owner_peer_id: int = 1
 var gen := Gens.DEFAULT
+## 0 in free-for-all, 1 or 2 in team mode. Set at spawn time.
+var team := 0
 
 # --- replicated by the server (see configure_replication) ---
 var hp: int
@@ -85,7 +88,7 @@ var _aim_pad: Control = null
 func _ready() -> void:
 	hp = max_hp
 	add_to_group("net_player")
-	visual.color = COLORS[absi(owner_peer_id) % COLORS.size()]
+	visual.color = TEAM_COLORS[team] if TEAM_COLORS.has(team) else COLORS[absi(owner_peer_id) % COLORS.size()]
 	disguise.scale = Vector2.ONE * (DISGUISE_SIZE / disguise.texture.get_width())
 	_refresh_name()
 	Network.player_list_changed.connect(_refresh_name)
@@ -122,6 +125,10 @@ func _is_mine() -> bool:
 
 func _arena() -> Node:
 	return get_parent().get_parent()
+
+
+func is_enemy(other: NetPlayer) -> bool:
+	return other != self and (team == 0 or other.team != team)
 
 
 func _refresh_name() -> void:
@@ -303,7 +310,7 @@ func _server_shoot(aim: float) -> void:
 	var hit_point := to
 	if result:
 		hit_point = result.position
-		if result.collider is NetPlayer:
+		if result.collider is NetPlayer and is_enemy(result.collider):
 			(result.collider as NetPlayer).apply_damage(1)
 	_shot_fx.rpc(from, hit_point)
 
@@ -378,7 +385,7 @@ func _nearest_enemy() -> NetPlayer:
 	var best_dist := INF
 	for node in get_tree().get_nodes_in_group("net_player"):
 		var other := node as NetPlayer
-		if other == self or other.dead:
+		if other.dead or not is_enemy(other):
 			continue
 		var d := global_position.distance_squared_to(other.global_position)
 		if d < best_dist:

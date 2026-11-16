@@ -32,11 +32,14 @@ const MAX_NAME_LENGTH := 16
 const LOBBY_SCENE := "res://scenes/ui/net_lobby.tscn"
 const ARENA_SCENE := "res://scenes/net/net_arena.tscn"
 
-## peer_id -> { "name": String, "gen": String }. Server is the source of
-## truth; clients receive a full copy via _sync_players whenever it changes.
+## peer_id -> { "name": String, "gen": String, "team": int }. Server is
+## the source of truth; clients receive a full copy via _sync_players
+## whenever it changes. team is 0 in FFA, 1 or 2 in team mode.
 var players: Dictionary = {}
 var local_name := "Player"
 var local_gen := Gens.DEFAULT
+## "ffa" or "team" — host-controlled, synced with the roster.
+var match_mode := "ffa"
 var match_in_progress := false
 var last_reject_reason := ""
 
@@ -86,6 +89,20 @@ func player_gen(id: int) -> String:
 	return Gens.DEFAULT
 
 
+func player_team(id: int) -> int:
+	if players.has(id):
+		return players[id].get("team", 0)
+	return 0
+
+
+func is_team_mode() -> bool:
+	return match_mode == "team"
+
+
+static func team_name(team: int) -> String:
+	return "Team A" if team == 1 else "Team B"
+
+
 ## Pick your Gen for the next match. Ignored once a match is running.
 func select_gen(key: String) -> void:
 	if not Gens.is_valid(key) or match_in_progress:
@@ -96,6 +113,40 @@ func select_gen(key: String) -> void:
 		_broadcast_players()
 	elif is_connected_to_match():
 		_select_gen.rpc_id(1, key)
+
+
+## Switch sides in team mode. Ignored in FFA or once a match is running.
+func select_team(team: int) -> void:
+	if not is_team_mode() or match_in_progress or team not in [1, 2]:
+		return
+	if is_host():
+		players[1]["team"] = team
+		_broadcast_players()
+	elif is_connected_to_match():
+		_select_team.rpc_id(1, team)
+
+
+## Host only. Switching to team mode deals everyone onto alternating
+## sides; switching back clears teams.
+func set_match_mode(mode: String) -> void:
+	if not is_host() or match_in_progress or mode not in ["ffa", "team"]:
+		return
+	match_mode = mode
+	var ids := players.keys()
+	ids.sort()
+	for i in ids.size():
+		players[ids[i]]["team"] = (i % 2) + 1 if mode == "team" else 0
+	_broadcast_players()
+
+
+## Host only: the side with fewer players, for late joiners.
+func _smaller_team() -> int:
+	var counts := {1: 0, 2: 0}
+	for id in players:
+		var t: int = players[id].get("team", 0)
+		if counts.has(t):
+			counts[t] += 1
+	return 1 if counts[1] <= counts[2] else 2
 
 
 ## Starts listening for WebSocket connections on `port`. The host process
@@ -109,7 +160,8 @@ func host(port: int = DEFAULT_PORT) -> Error:
 	multiplayer.multiplayer_peer = peer
 	match_in_progress = false
 	last_reject_reason = ""
-	players = {1: {"name": local_name, "gen": local_gen}}
+	match_mode = "ffa"
+	players = {1: {"name": local_name, "gen": local_gen, "team": 0}}
 	player_list_changed.emit()
 	return OK
 
@@ -202,6 +254,7 @@ func _register(raw_name: String, gen: String) -> void:
 	players[id] = {
 		"name": cleaned if cleaned != "" else "Player %d" % id,
 		"gen": gen if Gens.is_valid(gen) else Gens.DEFAULT,
+		"team": _smaller_team() if is_team_mode() else 0,
 	}
 	_broadcast_players()
 
@@ -216,9 +269,20 @@ func _select_gen(key: String) -> void:
 		_broadcast_players()
 
 
+@rpc("any_peer", "call_remote", "reliable")
+func _select_team(team: int) -> void:
+	if not is_host() or match_in_progress or not is_team_mode() or team not in [1, 2]:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if players.has(id):
+		players[id]["team"] = team
+		_broadcast_players()
+
+
 @rpc("authority", "call_remote", "reliable")
-func _sync_players(roster: Dictionary) -> void:
+func _sync_players(roster: Dictionary, mode: String) -> void:
 	players = roster
+	match_mode = mode
 	player_list_changed.emit()
 
 
@@ -229,7 +293,7 @@ func _rejected(reason: String) -> void:
 
 
 func _broadcast_players() -> void:
-	_sync_players.rpc(players)
+	_sync_players.rpc(players, match_mode)
 	player_list_changed.emit()
 
 

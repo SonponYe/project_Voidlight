@@ -79,6 +79,31 @@ theme_override_constants/separation = 10
 horizontal_alignment = 1
 text = "ROOM"
 
+[node name="ModeRow" type="HBoxContainer" parent="VBox/RoomPanel"]
+alignment = 1
+theme_override_constants/separation = 10
+
+[node name="FFAButton" type="Button" parent="VBox/RoomPanel/ModeRow"]
+custom_minimum_size = Vector2(130, 0)
+text = "Free-For-All"
+
+[node name="TeamButton" type="Button" parent="VBox/RoomPanel/ModeRow"]
+custom_minimum_size = Vector2(130, 0)
+text = "Teams"
+
+[node name="TeamRow" type="HBoxContainer" parent="VBox/RoomPanel"]
+visible = false
+alignment = 1
+theme_override_constants/separation = 10
+
+[node name="TeamAButton" type="Button" parent="VBox/RoomPanel/TeamRow"]
+custom_minimum_size = Vector2(130, 0)
+text = "Join Team A"
+
+[node name="TeamBButton" type="Button" parent="VBox/RoomPanel/TeamRow"]
+custom_minimum_size = Vector2(130, 0)
+text = "Join Team B"
+
 [node name="PlayerList" type="VBoxContainer" parent="VBox/RoomPanel"]
 custom_minimum_size = Vector2(0, 140)
 theme_override_constants/separation = 4
@@ -113,6 +138,10 @@ text = "Back to Menu"
 
 [connection signal="pressed" from="VBox/ConnectPanel/ButtonRow/HostButton" to="." method="_on_host_pressed"]
 [connection signal="pressed" from="VBox/ConnectPanel/ButtonRow/JoinButton" to="." method="_on_join_pressed"]
+[connection signal="pressed" from="VBox/RoomPanel/ModeRow/FFAButton" to="." method="_on_ffa_pressed"]
+[connection signal="pressed" from="VBox/RoomPanel/ModeRow/TeamButton" to="." method="_on_team_mode_pressed"]
+[connection signal="pressed" from="VBox/RoomPanel/TeamRow/TeamAButton" to="." method="_on_team_a_pressed"]
+[connection signal="pressed" from="VBox/RoomPanel/TeamRow/TeamBButton" to="." method="_on_team_b_pressed"]
 [connection signal="pressed" from="VBox/RoomPanel/RoomButtons/StartButton" to="." method="_on_start_pressed"]
 [connection signal="pressed" from="VBox/RoomPanel/RoomButtons/LeaveButton" to="." method="_on_leave_pressed"]
 [connection signal="pressed" from="VBox/BackButton" to="." method="_on_back_pressed"]

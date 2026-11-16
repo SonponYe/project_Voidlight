@@ -48,6 +48,10 @@ func set_alive(alive: int, total: int) -> void:
 	alive_label.text = "Alive  %d / %d" % [alive, total]
 
 
+func set_alive_text(text: String) -> void:
+	alive_label.text = text
+
+
 func set_status(text: String) -> void:
 	status_label.text = text
 
