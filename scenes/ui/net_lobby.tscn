@@ -18,8 +18,8 @@ anchor_left = 0.5
 anchor_top = 0.08
 anchor_right = 0.5
 anchor_bottom = 0.92
-offset_left = -220.0
-offset_right = 220.0
+offset_left = -330.0
+offset_right = 330.0
 theme_override_constants/separation = 14
 
 [node name="TitleLabel" type="Label" parent="VBox"]
@@ -80,8 +80,21 @@ horizontal_alignment = 1
 text = "ROOM"
 
 [node name="PlayerList" type="VBoxContainer" parent="VBox/RoomPanel"]
-custom_minimum_size = Vector2(0, 160)
+custom_minimum_size = Vector2(0, 140)
 theme_override_constants/separation = 4
+
+[node name="GenTitle" type="Label" parent="VBox/RoomPanel"]
+horizontal_alignment = 1
+text = "YOUR GEN"
+
+[node name="GenRow" type="HBoxContainer" parent="VBox/RoomPanel"]
+alignment = 1
+theme_override_constants/separation = 6
+
+[node name="GenBlurb" type="Label" parent="VBox/RoomPanel"]
+horizontal_alignment = 1
+autowrap_mode = 2
+custom_minimum_size = Vector2(0, 40)
 
 [node name="RoomButtons" type="HBoxContainer" parent="VBox/RoomPanel"]
 alignment = 1

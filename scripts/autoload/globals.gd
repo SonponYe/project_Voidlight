@@ -13,7 +13,7 @@ const SAVE_PATH := "user://voidlight_save.save"
 ## same effect name player.gd's apply_powerup()/_end_effect() switch on.
 const POWER_DEFS := {
 	"camouflage": {"label": "Camouflage", "duration": 6.0, "strength": 1.0, "cooldown": 14.0},
-	"invincible": {"label": "Bulwark (Shield)", "duration": 4.0, "strength": 1.0, "cooldown": 14.0},
+	"invincible": {"label": "Shield", "duration": 4.0, "strength": 1.0, "cooldown": 14.0},
 	"decoy": {"label": "Decoy", "duration": 0.0, "strength": 1.0, "cooldown": 18.0},
 	"damage_boost": {"label": "Heavy Gunner", "duration": 6.0, "strength": 2.0, "cooldown": 14.0},
 	"blackout": {"label": "Blackout", "duration": 15.0, "strength": 1.0, "cooldown": 25.0},

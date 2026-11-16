@@ -32,10 +32,11 @@ const MAX_NAME_LENGTH := 16
 const LOBBY_SCENE := "res://scenes/ui/net_lobby.tscn"
 const ARENA_SCENE := "res://scenes/net/net_arena.tscn"
 
-## peer_id -> { "name": String }. Server is the source of truth; clients
-## receive a full copy via _sync_players whenever it changes.
+## peer_id -> { "name": String, "gen": String }. Server is the source of
+## truth; clients receive a full copy via _sync_players whenever it changes.
 var players: Dictionary = {}
 var local_name := "Player"
+var local_gen := Gens.DEFAULT
 var match_in_progress := false
 var last_reject_reason := ""
 
@@ -79,6 +80,24 @@ func player_name(id: int) -> String:
 	return "Player %d" % id
 
 
+func player_gen(id: int) -> String:
+	if players.has(id):
+		return players[id].get("gen", Gens.DEFAULT)
+	return Gens.DEFAULT
+
+
+## Pick your Gen for the next match. Ignored once a match is running.
+func select_gen(key: String) -> void:
+	if not Gens.is_valid(key) or match_in_progress:
+		return
+	local_gen = key
+	if is_host():
+		players[1]["gen"] = key
+		_broadcast_players()
+	elif is_connected_to_match():
+		_select_gen.rpc_id(1, key)
+
+
 ## Starts listening for WebSocket connections on `port`. The host process
 ## itself becomes peer id 1 and does NOT need a separate join() call.
 func host(port: int = DEFAULT_PORT) -> Error:
@@ -90,7 +109,7 @@ func host(port: int = DEFAULT_PORT) -> Error:
 	multiplayer.multiplayer_peer = peer
 	match_in_progress = false
 	last_reject_reason = ""
-	players = {1: {"name": local_name}}
+	players = {1: {"name": local_name, "gen": local_gen}}
 	player_list_changed.emit()
 	return OK
 
@@ -175,13 +194,26 @@ func _arena_ready() -> void:
 # ---------------------------------------------------------------------------
 
 @rpc("any_peer", "call_remote", "reliable")
-func _register(raw_name: String) -> void:
+func _register(raw_name: String, gen: String) -> void:
 	if not is_host():
 		return
 	var id := multiplayer.get_remote_sender_id()
 	var cleaned := raw_name.strip_edges().substr(0, MAX_NAME_LENGTH)
-	players[id] = {"name": cleaned if cleaned != "" else "Player %d" % id}
+	players[id] = {
+		"name": cleaned if cleaned != "" else "Player %d" % id,
+		"gen": gen if Gens.is_valid(gen) else Gens.DEFAULT,
+	}
 	_broadcast_players()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _select_gen(key: String) -> void:
+	if not is_host() or match_in_progress or not Gens.is_valid(key):
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if players.has(id):
+		players[id]["gen"] = key
+		_broadcast_players()
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -234,7 +266,7 @@ func _on_peer_disconnected(id: int) -> void:
 
 
 func _on_connected_to_server() -> void:
-	_register.rpc_id(1, local_name)
+	_register.rpc_id(1, local_name, local_gen)
 
 
 func _on_connection_failed() -> void:

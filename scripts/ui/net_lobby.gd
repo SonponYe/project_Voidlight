@@ -17,12 +17,19 @@ extends Control
 @onready var player_list: VBoxContainer = $VBox/RoomPanel/PlayerList
 @onready var start_button: Button = $VBox/RoomPanel/RoomButtons/StartButton
 @onready var leave_button: Button = $VBox/RoomPanel/RoomButtons/LeaveButton
+@onready var gen_row: HBoxContainer = $VBox/RoomPanel/GenRow
+@onready var gen_blurb: Label = $VBox/RoomPanel/GenBlurb
+
+const SELECTED_TINT := Color(1.3, 1.2, 0.7)
+const UNSELECTED_TINT := Color(1, 1, 1)
 
 var _connecting := false
+var _gen_buttons: Dictionary = {}
 
 
 func _ready() -> void:
 	name_edit.text = Network.local_name
+	_build_gen_buttons()
 	Network.player_list_changed.connect(_refresh_room)
 	Network.connection_failed.connect(_on_connection_failed)
 	Network.disconnected_from_server.connect(_on_disconnected)
@@ -67,9 +74,33 @@ func _show_room() -> void:
 	_refresh_room()
 
 
+## Built from Gens.DEFS so adding a Gen is a table edit, not a scene edit.
+func _build_gen_buttons() -> void:
+	for key in Gens.DEFS:
+		var def: Dictionary = Gens.DEFS[key]
+		var button := Button.new()
+		button.text = def["label"]
+		button.disabled = not def["available"]
+		button.pressed.connect(_on_gen_pressed.bind(key))
+		gen_row.add_child(button)
+		_gen_buttons[key] = button
+
+
+func _on_gen_pressed(key: String) -> void:
+	Network.select_gen(key)
+	_refresh_gen_buttons()
+
+
+func _refresh_gen_buttons() -> void:
+	for key in _gen_buttons:
+		_gen_buttons[key].modulate = SELECTED_TINT if key == Network.local_gen else UNSELECTED_TINT
+	gen_blurb.text = Gens.def(Network.local_gen)["blurb"]
+
+
 func _refresh_room() -> void:
 	if not room_panel.visible:
 		return
+	_refresh_gen_buttons()
 	for child in player_list.get_children():
 		child.queue_free()
 	var ids := Network.players.keys()
@@ -81,7 +112,7 @@ func _refresh_room() -> void:
 			tag = "  (host)"
 		if id == multiplayer.get_unique_id():
 			tag += "  (you)"
-		label.text = "%s%s" % [Network.player_name(id), tag]
+		label.text = "%s  —  %s%s" % [Network.player_name(id), Gens.label(Network.player_gen(id)), tag]
 		player_list.add_child(label)
 	room_title.text = "ROOM  —  %d / %d players" % [ids.size(), Network.MAX_PLAYERS]
 	if Network.is_host():
