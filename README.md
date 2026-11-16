@@ -85,7 +85,7 @@ Godot's native multiplayer (ENet, raw UDP) **does not work in a browser** — th
 **Recommendation: WebSocket client-server**, built server-authoritative (the server decides actual positions/hits, clients predict locally and get corrected) — the standard pattern for exactly this kind of game, and what makes "smooth with no lag" and "handle a lot of concurrent players" realistic goals rather than hopes.
 
 ### The Blackout Gen (where "the whole room is dark" goes)
-Instead of being the default, darkness becomes **one player's temporary Gen**: for **30 seconds**, the entire arena goes dark for everyone *except* the player who triggered it — only they get a flashlight for that window. Everyone else is suddenly blind in a normally-lit match. This directly reuses the existing `CanvasModulate`/`PointLight2D`/flashlight-cone systems already built for Solo mode — they just flip from "always on" to "one player's temporary ability."
+Instead of being the default, darkness becomes **one player's temporary Gen**: for **30 seconds**, the entire arena goes dark for everyone *except* the player who triggered it. The caster doesn't just get a flashlight back — they get a distinct **night-vision look** (a different visual read on the dark arena and everyone in it, not a lit cone), while everyone else is suddenly blind in a normally-lit match. This directly reuses the existing `CanvasModulate`/`PointLight2D` darkness systems already built for Solo mode, but the caster's own view needs a new night-vision presentation rather than reusing the flashlight-cone look as-is.
 
 ### Gens — the renamed, reworked power system (5 of 6 implemented)
 "Superpowers" is retired as the term — these are now called **Gens**. Each player picks one Gen in a lobby before a match starts (`power_select.gd`/`.tscn`); it charges up on a cooldown during play, the same pattern the pre-existing power-button/effect system already used. `Globals.POWER_DEFS` is the single source of truth for each Gen's duration/strength/cooldown, read by both the lobby and the match. The reworked mechanics below are **design decisions made, not yet implemented in code** — the table marks each one's actual build status separately from its design.
@@ -96,8 +96,8 @@ Instead of being the default, darkness becomes **one player's temporary Gen**: f
 | **Shield** *(renamed from Bulwark)* | A 360° shield around the player, lasting up to **30 seconds**, that degrades as it absorbs incoming damage and breaks/drops once it's taken enough | ⚠️ Currently just aliased to the Invincibility effect as a placeholder — the real degrading 360° shield is not yet built |
 | **Decoy** | Unchanged — spawns an AI clone that locks onto and hunts one specific opposing player | ✅ Built |
 | **Poltergeist** *(renamed from Heavy Gunner)* | Tags one enemy player with a tracking mark — for the Gen's duration, the caster can always see that tagged player's position, piercing the normal limited-vision rule (the one deliberate exception to "you can't see other players unless they're in view") | ❌ Not yet built — currently still Heavy Gunner (doubles bullet damage); full rework to tracking/tagging is a planned follow-up |
-| **Blackout** | Darkens the whole arena for everyone *except* the caster for **30 seconds** (increased from 15) — the caster alone keeps a flashlight | ✅ Built, duration still needs to be bumped from 15s to 30s |
-| **6th Gen — TBD** | — | ❌ Not yet named |
+| **Blackout** | Darkens the whole arena for everyone *except* the caster for **30 seconds** (increased from 15) — the caster alone gets a **night-vision view** of the dark arena, not just a flashlight | ⚠️ Darkness-for-others built; caster's night-vision visual and the 15s→30s duration bump are not yet implemented |
+| **Bomb Voyage** | Drop up to **5 bombs**. Each bomb is set, per-drop, to one of two trigger modes: **proximity** (auto-detonates when an enemy player gets close enough) or **manual** (caster detonates it on command, whenever they choose). The caster can always see their own dropped bombs' locations on the map, regardless of range — another deliberate exception to the limited-vision rule, same shape as Poltergeist but for bomb placements instead of a tagged player | ❌ Not yet built — this is the 6th Gen, previously unnamed |
 
 ### The Gen-selection lobby
 Reachable from the main menu's **Versus** button (replacing a direct jump into the arena). Each player picks one of the 5 named Gens (a disabled "Coming Soon" slot marks the open 6th), plus an FFA/Team mode toggle — Team is currently disabled since local 2-player Versus can't yet represent 2–3-per-team, that needs the real networking layer. This is deliberately just the *selection logic*: plain buttons with a simple highlight, not the "press something, a ring of options pops out" visual that's planned as a separate pass on top of this same backend.
@@ -105,7 +105,7 @@ Reachable from the main menu's **Versus** button (replacing a direct jump into t
 ### Open decisions before deeper implementation
 These are the things worth pinning down before sinking real time into the networking layer, since getting them wrong costs real rework:
 1. **Where does the server run?** Researched: free hosting tiers that sleep-on-idle (Render, Railway) or have been discontinued don't work for an always-on game server. **Oracle Cloud's "Always Free" tier** is the one genuinely-permanent free option found — recommended starting point once the networking layer is ready to deploy.
-2. **The 6th Gen**, and final names/terminology for Heavy Gunner → whatever replaces it long-term (currently landed on Poltergeist, mechanic above)
+2. **Bomb Voyage's full implementation** (the 6th Gen, now named and designed above, not yet built), and locking in Poltergeist's final name/feel versus the still-in-code Heavy Gunner
 3. **Team-assignment UI visual** — the backend (mode toggle, per-player picker) is built; the actual "pop-out" visual is explicitly left for later, to be built separately
 4. **Custom art** — once sprite files are provided for how players should look, they slot into the existing placeholder-swap pattern (every visual in this project so far is a flat shape or procedural texture specifically so it can be swapped for real art later — same approach applies here)
 5. Whether Solo/local Versus stay as permanent separate offline modes, or eventually fold into the same arena content — **decided for now: they stay separate**, untouched while work focuses on the web multiplayer pivot
@@ -342,11 +342,11 @@ VersusArena (Control, versus_manager.gd)
 ### Not started
 - [ ] Levels 2–5
 - [ ] Boss enemy
-- [ ] The 6th Gen (unnamed)
+- [ ] Bomb Voyage (6th Gen) — up to 5 bombs, proximity/manual trigger per bomb, caster-only map tracking of drops
 - [ ] Camouflage's attack-lock + manual-drop-to-shoot rework (currently just a visual disguise with no restriction)
 - [ ] Shield's real degrading 360° mechanic (currently aliased to Invincibility)
 - [ ] Poltergeist's tracking/tagging rework (currently still the old Heavy Gunner damage-boost effect)
-- [ ] Blackout's duration bump from 15s to 30s
+- [ ] Blackout's night-vision caster visual + duration bump from 15s to 30s
 - [ ] Limited player-vision-range implementation (map always visible, other players only visible in-range/in-view, no default long-range player tracking)
 - [ ] Wiring the Gen system, HUD, and touch controls into the new networked `NetPlayer`/`NetArena` (currently minimal, no powers yet by design)
 - [ ] Resolving an intermittent WebSocket disconnect seen during local multi-process testing (not yet root-caused — needs testing outside a heavily-loaded headless CLI harness)
@@ -380,7 +380,7 @@ The original plan was a 3-month, 5-level solo horror game shipping by September 
 
 **Networking has a first working prototype:** a real WebSocket client-server layer (`Network` autoload + `NetPlayer`/`NetArena`) exists and has been verified end-to-end — connect, spawn, server-authoritative movement, server-validated hit detection, replicated back to every peer — across genuinely separate OS processes, not just in-editor testing. It's deliberately minimal (no Gens, no HUD, no cover yet) so the core loop could be proven solid first. One open issue: an intermittent WebSocket disconnect showed up during repeated local multi-process testing, not yet root-caused; next step is testing it under normal conditions (an exported build or two editor instances) instead of a heavily-loaded headless CLI harness.
 
-**What's next (active design):** wiring the Gen system into the networked arena, finishing each Gen's reworked mechanic (Camouflage's attack-lock, Shield's real degrade-and-break behavior, Poltergeist's tracking rework, Blackout's 30s duration), implementing the new limited-vision rule, the 6th Gen, the fancy team-assignment visual, and graceful handling of laggy/disconnected players. Open decisions before deeper implementation are listed in that section (server hosting — Oracle Cloud Always Free recommended — final Gen roster, and vision-range tuning).
+**What's next (active design):** wiring the Gen system into the networked arena, finishing each Gen's reworked mechanic (Camouflage's attack-lock, Shield's real degrade-and-break behavior, Poltergeist's tracking rework, Blackout's night-vision visual + 30s duration), building **Bomb Voyage** (the newly-named and designed 6th Gen) from scratch, implementing the new limited-vision rule, the fancy team-assignment visual, and graceful handling of laggy/disconnected players. Open decisions before deeper implementation are listed in that section (server hosting — Oracle Cloud Always Free recommended — and vision-range tuning).
 
 ### Other ideas under consideration (not committed)
 - A co-op mode (two players vs. AI monsters together) — the shared-midpoint `arena_camera.gd` was built with this in mind
