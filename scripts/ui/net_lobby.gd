@@ -133,14 +133,26 @@ func _refresh_room() -> void:
 		if Network.is_team_mode():
 			enough = team_counts[1] > 0 and team_counts[2] > 0
 		start_button.disabled = not enough
+		var where := "Friends on your Wi-Fi join with:  %s" % _lan_address()
 		if enough:
-			status_label.text = "Press Start when everyone's in."
+			status_label.text = "Press Start when everyone's in.   %s" % where
 		elif Network.is_team_mode():
-			status_label.text = "Both teams need at least one player."
+			status_label.text = "Both teams need at least one player.   %s" % where
 		else:
-			status_label.text = "Waiting for at least one more player..."
+			status_label.text = "Waiting for at least one more player...   %s" % where
 	else:
 		status_label.text = "Waiting for the host to start the match..."
+
+
+## The host's private IPv4 on the local network — what a friend on the
+## same Wi-Fi types into the Host IP box. Public-internet play needs the
+## host's public IP plus port forwarding (or the hosted server, later).
+func _lan_address() -> String:
+	for address in IP.get_local_addresses():
+		if address.begins_with("192.168.") or address.begins_with("10.") \
+				or (address.begins_with("172.") and int(address.split(".")[1]) in range(16, 32)):
+			return address
+	return "127.0.0.1 (no LAN address found)"
 
 
 func _refresh_mode_buttons() -> void:
