@@ -46,7 +46,7 @@ Two players, one device, **no shared camera** — the screen splits top/bottom a
 Reachable from the main menu's **Versus (2 Player, Local)** button.
 
 ### Online (first playable version)
-Reachable from the main menu's **Online (Multiplayer)** button. One player hosts, the others join by the host's IP, everyone waits in a room showing who's in (names, chosen Gen, host tag, up to 5 players), picks a Gen, and the host starts the match. The arena is a bright 24×16-cell maze (1536×1024) with scattered wall blocks for cover and a camera that follows you; other players are only visible under the limited-vision rule above. Five Gens are live (Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage — see the Gen table). Last player standing wins, the winner is announced to everyone, eliminated players spectate, and the host can send the whole room back to the lobby for another round without anyone reconnecting. Mobile touch controls (joystick, aim pad, shoot, Gen, and a detonate button for Bomb Voyage) are wired in.
+Reachable from the main menu's **Online (Multiplayer)** button. One player hosts, the others join by the host's IP, everyone waits in a room showing who's in (names, chosen Gen, team, host tag, up to 5 players), picks a Gen, and the host starts the match. The host chooses **Free-For-All** or **Teams**: in team mode players are dealt onto Team A / Team B (switchable with a button), teammates always see each other on the map, there's no friendly fire (your own bomb can still hurt *you*), A spawns down the left edge and B down the right, and the last team standing wins. The arena is a bright 24×16-cell maze (1536×1024) with scattered wall blocks for cover and a camera that follows you; enemies are only visible under the limited-vision rule above. Five Gens are live (Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage — see the Gen table). The winner is announced to everyone, eliminated players spectate, and the host can send the whole room back to the lobby for another round without anyone reconnecting. Mobile touch controls (joystick, aim pad, shoot, Gen, and a detonate button for Bomb Voyage) are wired in.
 
 ---
 
@@ -358,8 +358,8 @@ VersusArena (Control, versus_manager.gd)
 - [ ] Gen balance pass — every number is a first guess until real matches happen
 - [x] Limited player vision online (ring + forward cone + line of sight, firing reveals you) — first-pass numbers, client-side
 - [x] Online Gens: Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage — picked in the online lobby, server-authoritative, verified host + 2 clients
+- [x] Online team mode: host toggles FFA/Teams, auto-dealt A/B with switching, teammates always visible, no friendly fire, team spawns, last team standing wins — verified host + 2 clients
 - [ ] Online Decoy (needs the AI clone ported to the networked arena)
-- [ ] Online team mode (team assignment, friendly-fire rules) — FFA only for now
 - [ ] Movement smoothing online: reconciliation for your own avatar, interpolation for everyone else's
 - [ ] Laggy/disconnected players staying in the match dimmed instead of being removed
 - [ ] Matchmaking / room codes — joining is by the host's IP address for now
@@ -394,7 +394,7 @@ The original plan was a 3-month, 5-level solo horror game shipping by September 
 
 **Online play has its first playable version:** a real WebSocket client-server layer (`Network` autoload + `NetPlayer`/`NetArena`) with a host/join lobby, a named roster, a 5-player cap, a full match loop (spawn, eliminations, winner announced, results screen, back to the lobby for another round) and a HUD with touch controls — all verified end-to-end across three genuinely separate OS processes (a host and two clients), not just in-editor. It's deliberately a bare, lit, cover-free box so the loop could be proven solid before the design layers on. The intermittent disconnect seen in earlier prototype testing did not reappear in any of this session's runs, but it still needs confirming on real exported builds.
 
-**The online game now has its design in it:** the maze arena with cover, the limited-vision rule, and five of the six Gens (Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage) all running server-authoritatively and verified across three real processes. **What's next:** testing on real exported builds (the Phase 1 check for the old intermittent disconnect), the online Decoy port, team mode, movement smoothing, the team-assignment visual, graceful handling of laggy players, and then a proper balance pass on every Gen number once people have actually played. Open decisions are listed in that section (server hosting — Oracle Cloud Always Free recommended — and tuning).
+**The online game now has its design in it:** the maze arena with cover, the limited-vision rule, five of the six Gens (Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage) and FFA/Team modes, all running server-authoritatively and verified across three real processes. **What's next:** testing on real exported builds (the Phase 1 check for the old intermittent disconnect), the online Decoy port, movement smoothing, the team-assignment visual, graceful handling of laggy players, and then a proper balance pass on every Gen number once people have actually played. Open decisions are listed in that section (server hosting — Oracle Cloud Always Free recommended — and tuning).
 
 ### Other ideas under consideration (not committed)
 - A co-op mode (two players vs. AI monsters together) — the shared-midpoint `arena_camera.gd` was built with this in mind
