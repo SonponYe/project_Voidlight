@@ -26,6 +26,15 @@ const COLORS := [
 const AIM_SEND_INTERVAL := 0.05
 const TRACER_LIFETIME := 0.12
 
+## Vision rule (see net_arena.gd): enemies inside VISION_RADIUS are seen in
+## any direction; out to VIEW_RANGE only inside the forward cone.
+const VISION_RADIUS := 180.0
+const VIEW_RANGE := 420.0
+const VIEW_HALF_ANGLE := deg_to_rad(40.0)
+## Firing gives your position away to everyone for this long.
+const REVEAL_ON_SHOT := 0.5
+const VISION_GUIDE_COLOR := Color(1, 1, 1, 0.08)
+
 @export var speed := 160.0
 @export var max_hp := 5
 @export var shoot_range := 400.0
@@ -38,6 +47,7 @@ var owner_peer_id: int = 1
 
 var hp: int
 var dead := false
+var reveal_timer := 0.0
 
 var _input_dir := Vector2.ZERO
 var _aim := 0.0
@@ -61,6 +71,20 @@ func _ready() -> void:
 	if _is_mine():
 		_joystick = get_tree().get_first_node_in_group("touch_joystick_p1")
 		_aim_pad = get_tree().get_first_node_in_group("touch_aim_p1")
+		queue_redraw()
+
+
+## Faint guides for your own vision: the close ring and the forward cone's
+## far edge. Drawn in local space, so the cone turns with your aim for free.
+func _draw() -> void:
+	if not _is_mine():
+		return
+	draw_arc(Vector2.ZERO, VISION_RADIUS, 0.0, TAU, 48, VISION_GUIDE_COLOR, 1.0)
+	draw_arc(Vector2.ZERO, VIEW_RANGE, -VIEW_HALF_ANGLE, VIEW_HALF_ANGLE, 24, VISION_GUIDE_COLOR, 1.0)
+	var edge_start := Vector2.RIGHT * VISION_RADIUS
+	var edge_end := Vector2.RIGHT * VIEW_RANGE
+	draw_line(edge_start.rotated(-VIEW_HALF_ANGLE), edge_end.rotated(-VIEW_HALF_ANGLE), VISION_GUIDE_COLOR, 1.0)
+	draw_line(edge_start.rotated(VIEW_HALF_ANGLE), edge_end.rotated(VIEW_HALF_ANGLE), VISION_GUIDE_COLOR, 1.0)
 
 
 func _exit_tree() -> void:
@@ -92,7 +116,8 @@ func _refresh_name() -> void:
 	name_label.text = Network.player_name(owner_peer_id)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	reveal_timer = maxf(0.0, reveal_timer - delta)
 	name_label.rotation = -rotation
 	var alpha := 0.25 if dead else 1.0
 	visual.modulate.a = alpha
@@ -200,6 +225,7 @@ func _server_shoot(aim: float) -> void:
 
 @rpc("authority", "call_local", "unreliable")
 func _shot_fx(from: Vector2, to: Vector2) -> void:
+	reveal_timer = REVEAL_ON_SHOT
 	var tracer := Line2D.new()
 	tracer.width = 2.0
 	tracer.default_color = Color(1.0, 0.95, 0.6)

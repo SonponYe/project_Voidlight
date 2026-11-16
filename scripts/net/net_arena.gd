@@ -18,9 +18,11 @@ const READY_TIMEOUT_SEC := 8.0
 @onready var players_root: Node2D = $Players
 @onready var spawner: MultiplayerSpawner = $MultiplayerSpawner
 @onready var hud: CanvasLayer = $NetHUD
+@onready var camera: Camera2D = $Camera
 
+## Floor-cell centers of the Maze layout: the four corners, then the middle.
 var _spawn_points := [
-	Vector2(80, 80), Vector2(880, 80), Vector2(80, 560), Vector2(880, 560), Vector2(480, 320),
+	Vector2(96, 96), Vector2(1440, 96), Vector2(96, 928), Vector2(1440, 928), Vector2(800, 480),
 ]
 var _match_started := false
 var _match_over := false
@@ -51,7 +53,42 @@ func _exit_tree() -> void:
 
 
 func _process(_delta: float) -> void:
-	_update_hud()
+	var me := _local_player()
+	_update_vision(me)
+	if me:
+		camera.global_position = me.global_position
+	_update_hud(me)
+
+
+# ---------------------------------------------------------------------------
+# Vision (every peer, about its own view)
+# ---------------------------------------------------------------------------
+
+## The map is always visible; other players are not. You see an enemy only
+## when they're close, or ahead of you inside your view cone, with nothing
+## solid in between — or when they just gave themselves away by firing.
+## Spectators (dead) see everyone. This is client-side culling: the server
+## still replicates every position, so it's a presentation rule for now,
+## not an anti-cheat one.
+func _update_vision(me: NetPlayer) -> void:
+	for p in players_root.get_children():
+		if not p is NetPlayer or p == me:
+			continue
+		p.visible = me == null or me.dead or _can_see(me, p)
+
+
+func _can_see(me: NetPlayer, other: NetPlayer) -> bool:
+	if other.reveal_timer > 0.0:
+		return true
+	var offset := other.global_position - me.global_position
+	var dist := offset.length()
+	if dist > NetPlayer.VIEW_RANGE:
+		return false
+	if dist > NetPlayer.VISION_RADIUS \
+			and absf(angle_difference(me.rotation, offset.angle())) > NetPlayer.VIEW_HALF_ANGLE:
+		return false
+	var query := PhysicsRayQueryParameters2D.create(me.global_position, other.global_position, 1)
+	return get_world_2d().direct_space_state.intersect_ray(query).is_empty()
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +216,7 @@ func _local_player() -> NetPlayer:
 	return players_root.get_node_or_null(str(multiplayer.get_unique_id())) as NetPlayer
 
 
-func _update_hud() -> void:
+func _update_hud(me: NetPlayer) -> void:
 	var alive := 0
 	var total := 0
 	for child in players_root.get_children():
@@ -188,7 +225,6 @@ func _update_hud() -> void:
 			if not child.dead:
 				alive += 1
 	hud.set_alive(alive, total)
-	var me := _local_player()
 	if me:
 		hud.set_hp(me.hp, me.max_hp)
 		if me.dead and not _match_over:

@@ -46,7 +46,7 @@ Two players, one device, **no shared camera** — the screen splits top/bottom a
 Reachable from the main menu's **Versus (2 Player, Local)** button.
 
 ### Online (first playable version)
-Reachable from the main menu's **Online (Multiplayer)** button. One player hosts, the others join by the host's IP, everyone waits in a room showing who's in (names, host tag, up to 5 players), and the host starts the match. The arena is a plain, bright, sealed box with no cover: last player standing wins, the winner is announced to everyone, eliminated players spectate, and the host can send the whole room back to the lobby for another round without anyone reconnecting. No Gens, darkness, or cover yet — this is the "can I actually play online with a friend" milestone the rest of the design builds on. Mobile touch controls (joystick, aim pad, shoot button) are wired in.
+Reachable from the main menu's **Online (Multiplayer)** button. One player hosts, the others join by the host's IP, everyone waits in a room showing who's in (names, host tag, up to 5 players), and the host starts the match. The arena is a bright 24×16-cell maze (1536×1024) with scattered wall blocks for cover and a camera that follows you; other players are only visible under the limited-vision rule above. Last player standing wins, the winner is announced to everyone, eliminated players spectate, and the host can send the whole room back to the lobby for another round without anyone reconnecting. No Gens or darkness yet. Mobile touch controls (joystick, aim pad, shoot button) are wired in.
 
 ---
 
@@ -76,6 +76,8 @@ The original premise — the whole arena is dark, your flashlight is your only v
 VOIDLIGHT isn't trying to be another twitch-reflex shooter — the identity is **tactical and psychological**. The core tension isn't just "can you aim," it's "do you know where anyone actually is, and do they know where you are." You can win a fight by going loud and burning your Gen outright, or you can win by baiting an enemy into revealing themselves, wasting their Gen, or walking into a read you set up two minutes earlier. Every match is a running information game as much as a shootout.
 
 **Vision is limited, not global.** Players always see the arena layout (map/terrain), but *not* other players by default — only enemies that are close enough or inside your actual view/vision cone are visible, same as a normal line-of-sight shooter. There's no free long-range or minimap tracking of other players. The one deliberate exception is the **Poltergeist** Gen (see below), which pierces this rule for a single tagged target.
+
+✅ **Built (online arena):** an enemy is visible when they're within 180px in any direction, or within 420px inside your 80° forward cone, *and* nothing solid is between you. Firing reveals the shooter to everyone for half a second. Eliminated players spectate with full vision. Faint guide lines around your own avatar show the ring and the cone. This is currently client-side culling (the server still sends every position), so it's a presentation rule, not yet an anti-cheat one. Exact numbers are first-pass and need playtesting.
 
 ### Networking approach
 Godot's native multiplayer (ENet, raw UDP) **does not work in a browser** — that's a hard constraint, not a preference. For a web build, the real choice is:
@@ -353,8 +355,8 @@ VersusArena (Control, versus_manager.gd)
 - [ ] Shield's real degrading 360° mechanic (currently aliased to Invincibility)
 - [ ] Poltergeist's tracking/tagging rework (currently still the old Heavy Gunner damage-boost effect)
 - [ ] Blackout's night-vision caster visual + duration bump from 15s to 30s
-- [ ] Limited player-vision-range implementation (map always visible, other players only visible in-range/in-view, no default long-range player tracking)
-- [ ] Wiring the Gen system, cover blocks, and the darkness/flashlight system into the online arena (currently a bare lit box by design)
+- [x] Limited player vision online (ring + forward cone + line of sight, firing reveals you) — first-pass numbers, client-side
+- [ ] Wiring the Gen system and the darkness/flashlight system into the online arena (cover is in; the maze's wall occluders are ready for Blackout)
 - [ ] Online team mode (team assignment, friendly-fire rules) — FFA only for now
 - [ ] Movement smoothing online: reconciliation for your own avatar, interpolation for everyone else's
 - [ ] Laggy/disconnected players staying in the match dimmed instead of being removed
