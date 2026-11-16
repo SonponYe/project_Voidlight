@@ -1,24 +1,38 @@
 extends Node2D
 ## The online match arena. Server-authoritative: the host spawns every
-## player, tracks eliminations, decides the winner, and tells everyone.
-## Clients just report "my arena is loaded" and then render what the
-## server replicates. No cover, no Gens, no darkness yet — those layer on
-## once this plain deathmatch loop is solid online.
+## player, tracks eliminations, decides the winner, runs the arena-wide Gen
+## effects (Blackout, bombs), and tells everyone. Clients report "my arena
+## is loaded" and then render what the server replicates.
 ##
 ## Entered via Network.start_match() from the lobby, so the connection and
 ## roster already exist by the time _ready() runs here.
 
 const NET_PLAYER_SCENE := "res://scenes/net/net_player.tscn"
+const NET_BOMB_SCENE := "res://scenes/net/net_bomb.tscn"
 
 ## How long the host waits for every client to load the arena before
 ## starting without the stragglers. A spawn sent to a peer whose arena
 ## isn't loaded is lost, not queued, so late peers can only spectate.
 const READY_TIMEOUT_SEC := 8.0
 
+const BOMB_TRIGGER_RADIUS := 48.0
+const BOMB_BLAST_RADIUS := 90.0
+const BOMB_DAMAGE := 3
+const EXPLOSION_LIFETIME := 0.35
+const EXPLOSION_COLOR := Color(1.0, 0.6, 0.2, 0.8)
+
+## Under Blackout, anyone who isn't the caster only sees this far, in any
+## direction — no cone. The caster keeps the normal rule.
+const BLACKOUT_VISION_RADIUS := 70.0
+const BLACKOUT_COLOR := Color(0.06, 0.06, 0.08)
+
 @onready var players_root: Node2D = $Players
+@onready var bombs_root: Node2D = $Bombs
 @onready var spawner: MultiplayerSpawner = $MultiplayerSpawner
+@onready var bomb_spawner: MultiplayerSpawner = $BombSpawner
 @onready var hud: CanvasLayer = $NetHUD
 @onready var camera: Camera2D = $Camera
+@onready var world_modulate: CanvasModulate = $CanvasModulate
 
 ## Floor-cell centers of the Maze layout: the four corners, then the middle.
 var _spawn_points := [
@@ -29,11 +43,18 @@ var _match_over := false
 ## A match that started with a single player is a sandbox, never "won".
 var _is_contest := false
 var _participants: Array[int] = []
+var _bomb_seq := 0
+
+## Peer id of the active Blackout caster, 0 when the lights are on.
+## Broadcast by the server via _set_blackout.
+var blackout_by := 0
 
 
 func _ready() -> void:
 	spawner.spawn_path = players_root.get_path()
 	spawner.spawn_function = _spawn_player
+	bomb_spawner.spawn_path = bombs_root.get_path()
+	bomb_spawner.spawn_function = _spawn_bomb
 	hud.return_pressed.connect(_on_return_pressed)
 	hud.leave_pressed.connect(_on_leave_pressed)
 	Network.disconnected_from_server.connect(_on_lost_server)
@@ -55,40 +76,15 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	var me := _local_player()
 	_update_vision(me)
+	_update_blackout_visuals(me)
 	if me:
 		camera.global_position = me.global_position
 	_update_hud(me)
 
 
-# ---------------------------------------------------------------------------
-# Vision (every peer, about its own view)
-# ---------------------------------------------------------------------------
-
-## The map is always visible; other players are not. You see an enemy only
-## when they're close, or ahead of you inside your view cone, with nothing
-## solid in between — or when they just gave themselves away by firing.
-## Spectators (dead) see everyone. This is client-side culling: the server
-## still replicates every position, so it's a presentation rule for now,
-## not an anti-cheat one.
-func _update_vision(me: NetPlayer) -> void:
-	for p in players_root.get_children():
-		if not p is NetPlayer or p == me:
-			continue
-		p.visible = me == null or me.dead or _can_see(me, p)
-
-
-func _can_see(me: NetPlayer, other: NetPlayer) -> bool:
-	if other.reveal_timer > 0.0:
-		return true
-	var offset := other.global_position - me.global_position
-	var dist := offset.length()
-	if dist > NetPlayer.VIEW_RANGE:
-		return false
-	if dist > NetPlayer.VISION_RADIUS \
-			and absf(angle_difference(me.rotation, offset.angle())) > NetPlayer.VIEW_HALF_ANGLE:
-		return false
-	var query := PhysicsRayQueryParameters2D.create(me.global_position, other.global_position, 1)
-	return get_world_2d().direct_space_state.intersect_ray(query).is_empty()
+func _physics_process(_delta: float) -> void:
+	if Network.is_host():
+		_server_check_bombs()
 
 
 # ---------------------------------------------------------------------------
@@ -127,19 +123,24 @@ func _begin_match() -> void:
 func _spawn_for_peer(id: int) -> void:
 	if players_root.has_node(str(id)):
 		return
-	var data := {"id": id, "spawn": _participants.size() % _spawn_points.size()}
+	var data := {
+		"id": id,
+		"spawn": _participants.size() % _spawn_points.size(),
+		"gen": Network.player_gen(id),
+	}
 	var node := spawner.spawn(data) as NetPlayer
 	node.died.connect(_on_player_died)
 	_participants.append(id)
 
 
-## Runs on every peer with the same data, so the spawn slot travels with it
-## rather than being derived from server-only state.
+## Runs on every peer with the same data, so the spawn slot and Gen travel
+## with it rather than being derived from server-only state.
 func _spawn_player(data: Dictionary) -> Node:
 	var scene: PackedScene = load(NET_PLAYER_SCENE)
 	var player := scene.instantiate() as NetPlayer
 	player.name = str(data["id"])
 	player.owner_peer_id = data["id"]
+	player.gen = data["gen"]
 	player.position = _spawn_points[data["spawn"]]
 	player.configure_replication()
 	return player
@@ -155,8 +156,10 @@ func _on_player_died(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
-	var node := players_root.get_node_or_null(str(id))
+	var node := players_root.get_node_or_null(str(id)) as NetPlayer
 	if node:
+		if node.gen == "blackout" and blackout_by == id:
+			end_blackout(id)
 		node.queue_free()
 	if _match_started:
 		_announce.rpc("%s left the match" % Network.player_name(id))
@@ -184,6 +187,142 @@ func _check_win() -> void:
 	if alive.size() == 1:
 		text = "%s wins!" % Network.player_name(alive[0])
 	_show_results.rpc(text)
+
+
+# ---------------------------------------------------------------------------
+# Blackout (host decides, everyone renders)
+# ---------------------------------------------------------------------------
+
+func begin_blackout(caster_id: int) -> void:
+	_set_blackout.rpc(caster_id)
+
+
+func end_blackout(caster_id: int) -> void:
+	if blackout_by == caster_id:
+		_set_blackout.rpc(0)
+
+
+@rpc("authority", "call_local", "reliable")
+func _set_blackout(caster_id: int) -> void:
+	blackout_by = caster_id
+
+
+func _is_blind(me: NetPlayer) -> bool:
+	return blackout_by != 0 and me != null and not me.dead and me.owner_peer_id != blackout_by
+
+
+func _update_blackout_visuals(me: NetPlayer) -> void:
+	var blind := _is_blind(me)
+	world_modulate.color = BLACKOUT_COLOR if blind else Color.WHITE
+	hud.set_night_vision(blackout_by != 0 and me != null and me.owner_peer_id == blackout_by)
+	for p in players_root.get_children():
+		if p is NetPlayer:
+			p.glow.enabled = blind and p == me
+
+
+# ---------------------------------------------------------------------------
+# Bomb Voyage (host)
+# ---------------------------------------------------------------------------
+
+func place_bomb(owner_id: int, pos: Vector2, manual: bool) -> void:
+	_bomb_seq += 1
+	bomb_spawner.spawn({"id": _bomb_seq, "owner": owner_id, "pos": pos, "manual": manual})
+
+
+func _spawn_bomb(data: Dictionary) -> Node:
+	var scene: PackedScene = load(NET_BOMB_SCENE)
+	var bomb := scene.instantiate() as NetBomb
+	bomb.name = "bomb_%d" % data["id"]
+	bomb.owner_peer_id = data["owner"]
+	bomb.manual = data["manual"]
+	bomb.position = data["pos"]
+	return bomb
+
+
+func detonate_bombs(owner_id: int) -> void:
+	for b in bombs_root.get_children():
+		if b is NetBomb and b.owner_peer_id == owner_id and b.manual:
+			_explode(b)
+
+
+func _server_check_bombs() -> void:
+	for b in bombs_root.get_children():
+		if not b is NetBomb or b.manual or b.is_queued_for_deletion():
+			continue
+		for p in players_root.get_children():
+			if p is NetPlayer and not p.dead and p.owner_peer_id != b.owner_peer_id \
+					and p.global_position.distance_to(b.global_position) <= BOMB_TRIGGER_RADIUS:
+				_explode(b)
+				break
+
+
+func _explode(bomb: NetBomb) -> void:
+	if bomb.is_queued_for_deletion():
+		return
+	var pos := bomb.global_position
+	_explosion_fx.rpc(pos)
+	for p in players_root.get_children():
+		if p is NetPlayer and not p.dead and p.global_position.distance_to(pos) <= BOMB_BLAST_RADIUS:
+			p.apply_damage(BOMB_DAMAGE)
+	var owner := players_root.get_node_or_null(str(bomb.owner_peer_id)) as NetPlayer
+	if owner:
+		owner.bomb_exploded()
+	bomb.queue_free()
+
+
+@rpc("authority", "call_local", "unreliable")
+func _explosion_fx(pos: Vector2) -> void:
+	var points := PackedVector2Array()
+	for i in 24:
+		points.append(pos + Vector2.RIGHT.rotated(TAU * i / 24.0) * BOMB_BLAST_RADIUS)
+	var blast := Polygon2D.new()
+	blast.polygon = points
+	blast.color = EXPLOSION_COLOR
+	bombs_root.add_child(blast)
+	var tween := blast.create_tween()
+	tween.tween_property(blast, "modulate:a", 0.0, EXPLOSION_LIFETIME)
+	tween.tween_callback(blast.queue_free)
+
+
+# ---------------------------------------------------------------------------
+# Vision (every peer, about its own view)
+# ---------------------------------------------------------------------------
+
+## The map is always visible; other players are not. You see an enemy only
+## when they're close, or ahead of you inside your view cone, with nothing
+## solid in between — or when they just gave themselves away by firing, or
+## you're haunting them with Poltergeist. Spectators (dead) see everyone.
+## Your own bombs are always visible to you and never to enemies.
+## This is client-side culling: the server still replicates every position,
+## so it's a presentation rule for now, not an anti-cheat one.
+func _update_vision(me: NetPlayer) -> void:
+	var spectating := me == null or me.dead
+	for p in players_root.get_children():
+		if not p is NetPlayer or p == me:
+			continue
+		p.haunted = me != null and me.poltergeist_target == p.owner_peer_id
+		p.visible = spectating or p.haunted or _can_see(me, p)
+	for b in bombs_root.get_children():
+		if b is NetBomb:
+			b.visible = spectating or b.owner_peer_id == me.owner_peer_id
+
+
+func _can_see(me: NetPlayer, other: NetPlayer) -> bool:
+	if other.reveal_timer > 0.0:
+		return true
+	var offset := other.global_position - me.global_position
+	var dist := offset.length()
+	if _is_blind(me):
+		if dist > BLACKOUT_VISION_RADIUS:
+			return false
+	else:
+		if dist > NetPlayer.VIEW_RANGE:
+			return false
+		if dist > NetPlayer.VISION_RADIUS \
+				and absf(angle_difference(me.rotation, offset.angle())) > NetPlayer.VIEW_HALF_ANGLE:
+			return false
+	var query := PhysicsRayQueryParameters2D.create(me.global_position, other.global_position, 1)
+	return get_world_2d().direct_space_state.intersect_ray(query).is_empty()
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +364,7 @@ func _update_hud(me: NetPlayer) -> void:
 			if not child.dead:
 				alive += 1
 	hud.set_alive(alive, total)
+	hud.set_gen(me)
 	if me:
 		hud.set_hp(me.hp, me.max_hp)
 		if me.dead and not _match_over:
@@ -235,11 +375,13 @@ func _on_lost_server() -> void:
 	hud.show_results("Lost connection to the host.", false)
 
 
-## Host only. Despawn the players BEFORE switching scenes: if the arena is
+## Host only. Despawn everything BEFORE switching scenes: if the arena is
 ## simply freed, its despawn packets reach clients after they've already
 ## torn down their own arena, and every one logs an ERR_UNAUTHORIZED.
 func _on_return_pressed() -> void:
 	for child in players_root.get_children():
+		child.queue_free()
+	for child in bombs_root.get_children():
 		child.queue_free()
 	await get_tree().process_frame
 	await get_tree().process_frame

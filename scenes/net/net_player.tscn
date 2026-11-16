@@ -1,9 +1,22 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/net/net_player.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/sprites/dungeon/crate.png" id="2"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 12.0
+
+[sub_resource type="Gradient" id="Gradient_glow"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_glow"]
+gradient = SubResource("Gradient_glow")
+width = 256
+height = 256
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(0.5, 0)
 
 [node name="NetPlayer" type="CharacterBody2D"]
 collision_layer = 2
@@ -17,6 +30,10 @@ shape = SubResource("CircleShape2D_body")
 color = Color(0.3, 0.8, 0.5, 1)
 polygon = PackedVector2Array(12, 0, -8, 8, -4, 0, -8, -8)
 
+[node name="Disguise" type="Sprite2D" parent="."]
+visible = false
+texture = ExtResource("2")
+
 [node name="NameLabel" type="Label" parent="."]
 offset_left = -50.0
 offset_top = -34.0
@@ -25,5 +42,12 @@ offset_bottom = -18.0
 theme_override_font_sizes/font_size = 12
 horizontal_alignment = 1
 text = "Player"
+
+[node name="Glow" type="PointLight2D" parent="."]
+enabled = false
+energy = 1.2
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_glow")
+texture_scale = 0.7
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
