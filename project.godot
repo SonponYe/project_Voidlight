@@ -17,6 +17,7 @@ boot_splash/show_image=false
 
 Globals="*res://scripts/autoload/globals.gd"
 BulletPool="*res://scripts/autoload/bullet_pool.gd"
+Network="*res://scripts/net/network_manager.gd"
 
 [display]
 
