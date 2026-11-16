@@ -368,7 +368,8 @@ VersusArena (Control, versus_manager.gd)
 - [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
 - [ ] Input rebinding menu
 - [ ] Real art/sound assets (everything is placeholder shapes + silent hooks)
-- [ ] HTML5 / Windows exports, Itch.io page
+- [x] HTML5 / Windows export presets + one-click `export_windows.bat` / `export_web.bat`
+- [ ] Itch.io page
 - [ ] Playtesting pass
 
 ---
@@ -416,8 +417,16 @@ The original plan was a 3-month, 5-level solo horror game shipping by September 
 3. Open Godot → Import Project → select the `project.godot` file
 4. Press `F5` to run
 
-### HTML5 / Windows exports
-Not set up yet — see [Status & Roadmap](#status--roadmap).
+### Building & testing online play
+Export presets for **Windows Desktop** and **Web** are committed in `export_presets.cfg`. One-time setup: open the project in the editor once and go to **Editor → Manage Export Templates → Download and Install** (the engine's export templates aren't part of the repo).
+
+1. Double-click **`export_windows.bat`** → `builds/windows/VOIDLIGHT.exe` (self-contained, no `.pck` beside it).
+2. **Same PC:** run two copies. In one: Online → Host. In the other: Online → Host IP `127.0.0.1` → Join.
+3. **Same Wi-Fi:** the host's room shows `Friends on your Wi-Fi join with: 192.168.x.x` — that's what the other machine types in. If Windows pops a firewall prompt the first time you host, allow it.
+4. **Web:** `export_web.bat` → `builds/web/`. A browser can't open it from the folder — serve it (`cd builds/web` then `python -m http.server 8000`, open `http://localhost:8000`). Browsers can only *join*; the host must be the desktop build (a browser page can't listen for connections). Over plain `http://` the game connects with `ws://`, which is fine on a LAN.
+5. **Internet:** not yet — that needs the always-on hosted server (see open decisions) or the host to port-forward 9050.
+
+The first real-build test to run is simply: host, join, play a round, play a second round from the same room. That's the check for the intermittent disconnect seen in early headless testing.
 
 ---
 
