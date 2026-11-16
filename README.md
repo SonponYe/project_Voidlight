@@ -2,7 +2,7 @@
 
 > *You can only see as far as your light allows. But they can hear everything.*
 
-A 2D top-down arena game built in Godot 4.x. Two modes are built and playable today — **Solo** survival (clear a dark, monster-filled arena and reach the exit) and **Versus** (two players, one device, split-screen PvP) — and the active design direction is a **web-based multiplayer arena shooter**: bright, colorful, up to 5 players per match (or 2–3v2–3 teams), each picking one of several unique superpowers, playable in a browser on desktop or mobile. See [Next: Web Multiplayer Arena](#next-web-multiplayer-arena-active-design) for where this is headed.
+A 2D top-down arena game built in Godot 4.x. Two modes are built and playable today — **Solo** survival (clear a dark, monster-filled arena and reach the exit) and **Versus** (two players, one device, split-screen PvP) — and the active design direction is a **web-based multiplayer tactical/psychological arena shooter**: bright, colorful, up to 5 players per match (or 2–3v2–3 teams), limited vision range (you can't just see every enemy on sight), each player picking one unique **Gen** (short for the engineered abilities that replace the old "superpower" idea), playable in a browser on desktop or mobile. The fight is as much about reading, baiting, and bluffing opponents as it is about aim. See [Next: Web Multiplayer Arena](#next-web-multiplayer-arena-active-design) for where this is headed.
 
 Developer: **Sonpon Ye-shua Chief** | Engine: **Godot 4.7.x** | Language: **GDScript**
 Target Platform: **Web (HTML5)** first — playable in-browser on desktop and mobile — plus Itch.io (Windows secondary)
@@ -31,7 +31,7 @@ Target Platform: **Web (HTML5)** first — playable in-browser on desktop and mo
 
 VOIDLIGHT started as a solo horror-survival game: you're dropped into a dark arena with nothing but a flashlight and a gun. You can only see what your light touches — everything outside the cone is invisible — but monsters can hear you, especially if you sprint. Turning the light off makes you nearly undetectable, but also blind: no minimap, no maze layout, just your own faint ambient glow to feel your way around.
 
-That same light-vs-detection tension turned out to work just as well **player vs player** — so VOIDLIGHT now also has a local split-screen **Versus** mode: two people on one device, same arena, hunting each other with the same flashlight/stealth mechanics, each with one unique power that can swing a fight.
+That same light-vs-detection tension turned out to work just as well **player vs player** — so VOIDLIGHT now also has a local split-screen **Versus** mode: two people on one device, same arena, hunting each other with the same flashlight/stealth mechanics, each with one unique power (soon to be called a **Gen**, see below) that can swing a fight.
 
 ---
 
@@ -69,6 +69,11 @@ The original premise — the whole arena is dark, your flashlight is your only v
 - A large arena to actually support that many bodies and sightlines at once — bigger than either existing arena
 - Players with network trouble should **stay in the match, visually dimmed**, rather than being dropped — the match keeps going around them
 
+### Identity: a tactical, psychological arena shooter
+VOIDLIGHT isn't trying to be another twitch-reflex shooter — the identity is **tactical and psychological**. The core tension isn't just "can you aim," it's "do you know where anyone actually is, and do they know where you are." You can win a fight by going loud and burning your Gen outright, or you can win by baiting an enemy into revealing themselves, wasting their Gen, or walking into a read you set up two minutes earlier. Every match is a running information game as much as a shootout.
+
+**Vision is limited, not global.** Players always see the arena layout (map/terrain), but *not* other players by default — only enemies that are close enough or inside your actual view/vision cone are visible, same as a normal line-of-sight shooter. There's no free long-range or minimap tracking of other players. The one deliberate exception is the **Poltergeist** Gen (see below), which pierces this rule for a single tagged target.
+
 ### Networking approach
 Godot's native multiplayer (ENet, raw UDP) **does not work in a browser** — that's a hard constraint, not a preference. For a web build, the real choice is:
 
@@ -79,31 +84,32 @@ Godot's native multiplayer (ENet, raw UDP) **does not work in a browser** — th
 
 **Recommendation: WebSocket client-server**, built server-authoritative (the server decides actual positions/hits, clients predict locally and get corrected) — the standard pattern for exactly this kind of game, and what makes "smooth with no lag" and "handle a lot of concurrent players" realistic goals rather than hopes.
 
-### The Blackout power (where "the whole room is dark" goes)
-Instead of being the default, darkness becomes **one player's temporary power**: for about 15 seconds, the entire arena goes dark for everyone *except* the player who triggered it — only they get a flashlight for that window. Everyone else is suddenly blind in a normally-lit match. This directly reuses the existing `CanvasModulate`/`PointLight2D`/flashlight-cone systems already built for Solo mode — they just flip from "always on" to "one player's temporary ability."
+### The Blackout Gen (where "the whole room is dark" goes)
+Instead of being the default, darkness becomes **one player's temporary Gen**: for **30 seconds**, the entire arena goes dark for everyone *except* the player who triggered it — only they get a flashlight for that window. Everyone else is suddenly blind in a normally-lit match. This directly reuses the existing `CanvasModulate`/`PointLight2D`/flashlight-cone systems already built for Solo mode — they just flip from "always on" to "one player's temporary ability."
 
-### Superpowers — 5 of 6 implemented
-Each player picks one superpower in a lobby before a match starts (`power_select.gd`/`.tscn`); it charges up on a cooldown during play, the same pattern the pre-existing power-button/powerup-effect system already used. `Globals.POWER_DEFS` is the single source of truth for each power's duration/strength/cooldown, read by both the lobby and the match.
+### Gens — the renamed, reworked power system (5 of 6 implemented)
+"Superpowers" is retired as the term — these are now called **Gens**. Each player picks one Gen in a lobby before a match starts (`power_select.gd`/`.tscn`); it charges up on a cooldown during play, the same pattern the pre-existing power-button/effect system already used. `Globals.POWER_DEFS` is the single source of truth for each Gen's duration/strength/cooldown, read by both the lobby and the match. The reworked mechanics below are **design decisions made, not yet implemented in code** — the table marks each one's actual build status separately from its design.
 
-| Working name | Effect | Status |
+| Gen | Design (current direction) | Build status |
 |---|---|---|
-| **Camouflage** | Disguises as a crate — body/head hidden, a crate sprite shown instead; purely visual, doesn't change movement or collision | ✅ Built |
-| **Bulwark (Shield)** | Aliased to the existing Invincibility effect as a placeholder | ✅ Built (as a placeholder — a real directional-block mechanic is a possible follow-up) |
-| **Decoy** | Spawns an AI clone (`decoy.gd`, an `Enemy` subclass) that locks onto and relentlessly hunts one specific opposing player; can be killed like any enemy; expires after a lifespan | ✅ Built |
-| **Heavy Gunner (Firepower)** | Doubles bullet damage for the duration | ✅ Built |
-| **Blackout** | Darkens the whole arena for everyone *except* the caster for ~15s — the caster alone keeps a flashlight; reaches outside the player node to dim every other player's own flashlight/ambient glow too | ✅ Built |
-| **6th power — TBD** | — | ❌ Not yet named |
+| **Camouflage** | Disguises as a crate for up to **60 seconds**. Can move/reposition/scout freely while disguised — but **cannot attack** in that state, and is still fully killable (an enemy that spots and shoots a disguised player kills them same as normal). To attack, the player must **manually drop the disguise first** — a deliberate, player-initiated action, not an automatic cancel-into-shoot — creating a real exposed beat before they can fire. | ⚠️ Visual disguise built; the attack-lock + manual-drop behavior is not yet implemented (currently no gameplay restriction while disguised) |
+| **Shield** *(renamed from Bulwark)* | A 360° shield around the player, lasting up to **30 seconds**, that degrades as it absorbs incoming damage and breaks/drops once it's taken enough | ⚠️ Currently just aliased to the Invincibility effect as a placeholder — the real degrading 360° shield is not yet built |
+| **Decoy** | Unchanged — spawns an AI clone that locks onto and hunts one specific opposing player | ✅ Built |
+| **Poltergeist** *(renamed from Heavy Gunner)* | Tags one enemy player with a tracking mark — for the Gen's duration, the caster can always see that tagged player's position, piercing the normal limited-vision rule (the one deliberate exception to "you can't see other players unless they're in view") | ❌ Not yet built — currently still Heavy Gunner (doubles bullet damage); full rework to tracking/tagging is a planned follow-up |
+| **Blackout** | Darkens the whole arena for everyone *except* the caster for **30 seconds** (increased from 15) — the caster alone keeps a flashlight | ✅ Built, duration still needs to be bumped from 15s to 30s |
+| **6th Gen — TBD** | — | ❌ Not yet named |
 
-### The power-selection lobby
-Reachable from the main menu's **Versus** button (replacing a direct jump into the arena). Each player picks one of the 5 named powers (a disabled "Coming Soon" slot marks the open 6th), plus an FFA/Team mode toggle — Team is currently disabled since local 2-player Versus can't yet represent 2–3-per-team, that needs the real networking layer. This is deliberately just the *selection logic*: plain buttons with a simple highlight, not the "press something, a ring of options pops out" visual that's planned as a separate pass on top of this same backend.
+### The Gen-selection lobby
+Reachable from the main menu's **Versus** button (replacing a direct jump into the arena). Each player picks one of the 5 named Gens (a disabled "Coming Soon" slot marks the open 6th), plus an FFA/Team mode toggle — Team is currently disabled since local 2-player Versus can't yet represent 2–3-per-team, that needs the real networking layer. This is deliberately just the *selection logic*: plain buttons with a simple highlight, not the "press something, a ring of options pops out" visual that's planned as a separate pass on top of this same backend.
 
 ### Open decisions before deeper implementation
 These are the things worth pinning down before sinking real time into the networking layer, since getting them wrong costs real rework:
 1. **Where does the server run?** Researched: free hosting tiers that sleep-on-idle (Render, Railway) or have been discontinued don't work for an always-on game server. **Oracle Cloud's "Always Free" tier** is the one genuinely-permanent free option found — recommended starting point once the networking layer is ready to deploy.
-2. **The 6th power**, and final names/terminology for all of them
-3. **Team-assignment UI visual** — the backend (mode toggle, per-player power picker) is built; the actual "pop-out" visual is explicitly left for later, to be built separately
+2. **The 6th Gen**, and final names/terminology for Heavy Gunner → whatever replaces it long-term (currently landed on Poltergeist, mechanic above)
+3. **Team-assignment UI visual** — the backend (mode toggle, per-player picker) is built; the actual "pop-out" visual is explicitly left for later, to be built separately
 4. **Custom art** — once sprite files are provided for how players should look, they slot into the existing placeholder-swap pattern (every visual in this project so far is a flat shape or procedural texture specifically so it can be swapped for real art later — same approach applies here)
 5. Whether Solo/local Versus stay as permanent separate offline modes, or eventually fold into the same arena content — **decided for now: they stay separate**, untouched while work focuses on the web multiplayer pivot
+6. **Limited vision range tuning** — exact vision cone/radius numbers for the new "can't see other players by default" rule aren't picked yet; needs playtesting once it's implemented
 
 ---
 
@@ -189,7 +195,7 @@ One reusable pickup script covers every type — each gets a distinct **shape** 
 | Light Boost | Sunburst | Flashlight range scales up (also increases how far enemies can spot you — it's a trade-off, not a free buff) |
 | Stealth | 4-point star | Completely unnoticeable — even point-blank with your light on — for a few seconds |
 
-In **Versus mode**, each player also has one unique power on a cooldown (`Q`/`M` by default) — the exact same effect system a pickup uses, just button-triggered instead of walked over. These are the 5 superpowers from the [web multiplayer design](#next-web-multiplayer-arena-active-design) (Camouflage, Bulwark/Shield, Decoy, Heavy Gunner, Blackout), picked per-player in the pre-match lobby (`power_select.gd`/`.tscn`) rather than hardcoded — defaults apply if the arena is loaded directly, skipping the lobby.
+In **Versus mode**, each player also has one unique Gen on a cooldown (`Q`/`M` by default) — the exact same effect system a pickup uses, just button-triggered instead of walked over. These are the 5 Gens from the [web multiplayer design](#next-web-multiplayer-arena-active-design) (Camouflage, Shield, Decoy, Poltergeist/Heavy Gunner, Blackout), picked per-player in the pre-match lobby (`power_select.gd`/`.tscn`) rather than hardcoded — defaults apply if the arena is loaded directly, skipping the lobby. The code/scripts still use "power" in names (`power_select.gd`, `POWER_DEFS`, etc.) — that's an internal naming detail, not a player-facing term; "Gen" is the in-game word.
 
 ---
 
@@ -285,23 +291,26 @@ VersusArena (Control, versus_manager.gd)
 
 | Script | Responsibility |
 |---|---|
-| `player.gd` | Movement, aim, shooting, HP/ammo, flashlight + ambient glow, muzzle flash, wall-bump audio, timed-effect system (powerups + the 5 superpowers), the power button, `player_index`-based input resolution (so one script serves both local players) |
+| `player.gd` | Movement, aim, shooting, HP/ammo, flashlight + ambient glow, muzzle flash, wall-bump audio, timed-effect system (powerups + the 5 Gens), the power button, `player_index`-based input resolution (so one script serves both local players) |
 | `enemy.gd` | FSM base (IDLE/AWARE/HUNT/DEAD), line-of-sight detection, navmesh pathfinding, contact damage, audio hooks |
 | `walker.gd` / `crawler.gd` / `lurker.gd` | Enemy.gd subclasses — speed/teleport overrides only |
-| `decoy.gd` | Enemy.gd subclass for the Decoy superpower — locks onto one chosen player instead of the nearest, expires after a lifespan |
+| `decoy.gd` | Enemy.gd subclass for the Decoy Gen — locks onto one chosen player instead of the nearest, expires after a lifespan |
 | `bullet.gd` / `bullet_pool.gd` | Pooled projectile; damages enemies or a different-team player |
 | `maze.gd` | Builds floor/walls from a `PackedStringArray` text grid; also merges wall-run collision to avoid seam-tunneling, and seals an outer boundary so you can't wander off into the void |
 | `wall.gd` | Reusable wall prefab — one exported `size`, builds its own collision + occluder + art |
 | `powerup.gd` | Generic timed-effect pickup, one script for all 4 solo-mode effect types |
 | `fireplace.gd` | Ignite/extinguish timer, ember glow, lighter-charge consumption |
 | `level_manager.gd` | Solo mode: kill tracking, exit, HUD/minimap wiring, navmesh baking |
-| `versus_manager.gd` | Versus mode: split-screen world sharing, per-player HUD, win condition, results screen, applies each player's lobby-selected power |
-| `power_select.gd` | Pre-match lobby: FFA/Team toggle, per-player power picker built from `Globals.POWER_DEFS`, writes the selections `versus_manager.gd` reads |
+| `versus_manager.gd` | Versus mode: split-screen world sharing, per-player HUD, win condition, results screen, applies each player's lobby-selected Gen |
+| `power_select.gd` | Pre-match lobby: FFA/Team toggle, per-player Gen picker built from `Globals.POWER_DEFS`, writes the selections `versus_manager.gd` reads |
 | `arena_camera.gd` | A shared-midpoint camera (built, not currently used — Versus uses per-player cameras instead; kept for a possible future co-op mode) |
 | `hud.gd` / `minimap.gd` | Solo HUD/minimap — signal-driven, no direct Globals reads |
 | `virtual_joystick.gd` | Touch movement input, one instance per player via group membership |
 | `touch_aim_pad.gd` | Touch-drag aim input; holds last direction on release instead of resetting to zero |
 | `touch_shoot_button.gd` | On-screen fire button; raw touch handling (not engine `TouchScreenButton`) so it can use the same anchor-based layout as the rest of the HUD |
+| `network_manager.gd` *(autoload: `Network`)* | Owns the actual WebSocket connection (`WebSocketMultiplayerPeer`), host/join/leave, and the connected-peer roster. Doesn't know about gameplay — `net_arena.gd`/`net_player.gd` build on top of it |
+| `net_arena.gd` | The networked arena's spawn/despawn logic — `MultiplayerSpawner`-driven, server decides who gets spawned where and for whom |
+| `net_player.gd` *(`NetPlayer`)* | Server-authoritative networked player: server simulates movement/position from received input and owns hit detection, the owning client also predicts its own movement locally for responsiveness (no reconciliation smoothing yet — corrections can visibly snap). Deliberately minimal: no Gens, no flashlight, no HUD yet — those layer on once this core loop is proven solid |
 
 ---
 
@@ -324,16 +333,23 @@ VersusArena (Control, versus_manager.gd)
 - [x] Audio hooks for every major event (silent until streams are assigned)
 - [x] On-screen virtual joystick for touch (movement)
 - [x] Touch-drag aim pad + on-screen shoot button
-- [x] Local split-screen Versus mode: per-player cameras, PvP damage, unique powers, win/results screen
-- [x] 5 of 6 superpowers implemented: Camouflage, Bulwark (placeholder), Decoy, Heavy Gunner, Blackout
-- [x] Power-selection lobby (FFA/Team toggle + per-player power picker) wired in from the main menu
+- [x] Local split-screen Versus mode: per-player cameras, PvP damage, unique Gens, win/results screen
+- [x] 5 of 6 Gens implemented: Camouflage, Shield (placeholder), Decoy, Heavy Gunner/Poltergeist (old mechanic, rename pending), Blackout
+- [x] Gen-selection lobby (FFA/Team toggle + per-player Gen picker) wired in from the main menu
+- [x] A real WebSocket client-server networking prototype (`Network` autoload, `NetPlayer`/`NetArena`) — server-authoritative movement + hit detection, verified end-to-end across separate processes; not yet wired to any real match/arena content
 - [x] `run.bat` — double-click to play, no Godot editor needed
 
 ### Not started
 - [ ] Levels 2–5
 - [ ] Boss enemy
-- [ ] The 6th superpower (unnamed)
-- [ ] Real networking (WebSocket client-server) — the big remaining piece for the web multiplayer pivot
+- [ ] The 6th Gen (unnamed)
+- [ ] Camouflage's attack-lock + manual-drop-to-shoot rework (currently just a visual disguise with no restriction)
+- [ ] Shield's real degrading 360° mechanic (currently aliased to Invincibility)
+- [ ] Poltergeist's tracking/tagging rework (currently still the old Heavy Gunner damage-boost effect)
+- [ ] Blackout's duration bump from 15s to 30s
+- [ ] Limited player-vision-range implementation (map always visible, other players only visible in-range/in-view, no default long-range player tracking)
+- [ ] Wiring the Gen system, HUD, and touch controls into the new networked `NetPlayer`/`NetArena` (currently minimal, no powers yet by design)
+- [ ] Resolving an intermittent WebSocket disconnect seen during local multi-process testing (not yet root-caused — needs testing outside a heavily-loaded headless CLI harness)
 - [ ] Team-assignment UI visual (the pop-out/radial look) — backend logic exists, visual layer doesn't
 - [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
 - [ ] Input rebinding menu
@@ -360,9 +376,11 @@ VersusArena (Control, versus_manager.gd)
 
 The original plan was a 3-month, 5-level solo horror game shipping by September 30, 2026. That date has passed, and the scope has grown well beyond the original plan — first with local split-screen Versus, and now with a much bigger pivot toward a **web-based multiplayer arena shooter** (see [Next: Web Multiplayer Arena](#next-web-multiplayer-arena-active-design)). There's no fixed ship date; development is ongoing and scope is still actively being shaped.
 
-**What actually exists today:** a fully playable Solo arena and a fully playable 2-player local Versus arena, both with real mechanics (not just placeholders) — flashlight/darkness, stealth detection, pathfinding, powerups, fireplaces, audio hooks throughout, and full mobile touch controls (movement, aim, shoot). Versus mode now has 5 of the 6 planned superpowers implemented (Camouflage, Bulwark, Decoy, Heavy Gunner, Blackout) and a working pre-match lobby to pick them. **What's missing** for those two modes: additional level content (2–5, boss), real art/sound, and export/ship logistics.
+**What actually exists today:** a fully playable Solo arena and a fully playable 2-player local Versus arena, both with real mechanics (not just placeholders) — flashlight/darkness, stealth detection, pathfinding, powerups, fireplaces, audio hooks throughout, and full mobile touch controls (movement, aim, shoot). Versus mode now has 5 of the 6 planned Gens implemented (Camouflage, Shield, Decoy, Heavy Gunner/Poltergeist, Blackout — some with reworked designs not yet coded, see [Gens](#gens--the-renamed-reworked-power-system-5-of-6-implemented)) and a working pre-match lobby to pick them. **What's missing** for those two modes: additional level content (2–5, boss), real art/sound, and export/ship logistics.
 
-**What's next (active design, not yet built):** the real networking layer (WebSocket client-server, recommended — researched, not started) is the one big remaining piece of the web multiplayer pivot, plus the 6th superpower, the fancy team-assignment visual, and graceful handling of laggy/disconnected players once there's an actual network to disconnect from. Open decisions before deep implementation starts are listed in that section (server hosting — Oracle Cloud Always Free recommended — and final power roster).
+**Networking has a first working prototype:** a real WebSocket client-server layer (`Network` autoload + `NetPlayer`/`NetArena`) exists and has been verified end-to-end — connect, spawn, server-authoritative movement, server-validated hit detection, replicated back to every peer — across genuinely separate OS processes, not just in-editor testing. It's deliberately minimal (no Gens, no HUD, no cover yet) so the core loop could be proven solid first. One open issue: an intermittent WebSocket disconnect showed up during repeated local multi-process testing, not yet root-caused; next step is testing it under normal conditions (an exported build or two editor instances) instead of a heavily-loaded headless CLI harness.
+
+**What's next (active design):** wiring the Gen system into the networked arena, finishing each Gen's reworked mechanic (Camouflage's attack-lock, Shield's real degrade-and-break behavior, Poltergeist's tracking rework, Blackout's 30s duration), implementing the new limited-vision rule, the 6th Gen, the fancy team-assignment visual, and graceful handling of laggy/disconnected players. Open decisions before deeper implementation are listed in that section (server hosting — Oracle Cloud Always Free recommended — final Gen roster, and vision-range tuning).
 
 ### Other ideas under consideration (not committed)
 - A co-op mode (two players vs. AI monsters together) — the shared-midpoint `arena_camera.gd` was built with this in mind
