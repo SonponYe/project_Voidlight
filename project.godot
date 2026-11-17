@@ -22,11 +22,16 @@ boot_splash/bg_color=Color(0, 0, 0, 1)
 boot_splash/show_image=false
 config/icon="res://icon.svg"
 
+[audio]
+
+driver/enable_input=true
+
 [autoload]
 
 Globals="*res://scripts/autoload/globals.gd"
 BulletPool="*res://scripts/autoload/bullet_pool.gd"
 Network="*res://scripts/net/network_manager.gd"
+Voice="*res://scripts/net/voice_chat.gd"
 
 [display]
 
@@ -152,6 +157,11 @@ pause={
 debug_toggle={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194332,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
+voice_mute={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":84,"key_label":0,"unicode":116,"location":0,"echo":false,"script":null)
 ]
 }
 
