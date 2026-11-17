@@ -46,7 +46,7 @@ Two players, one device, **no shared camera** — the screen splits top/bottom a
 Reachable from the main menu's **Versus (2 Player, Local)** button.
 
 ### Online (first playable version)
-Reachable from the main menu's **Online (Multiplayer)** button. One player hosts, the others join by the host's IP, everyone waits in a room showing who's in (names, chosen Gen, team, host tag, up to 5 players), picks a Gen, and the host starts the match. The host chooses **Free-For-All** or **Teams**: in team mode players are dealt onto Team A / Team B (switchable with a button), teammates always see each other on the map, there's no friendly fire (your own bomb can still hurt *you*), A spawns down the left edge and B down the right, and the last team standing wins. The arena is a bright 24×16-cell maze (1536×1024) with scattered wall blocks for cover and a camera that follows you; enemies are only visible under the limited-vision rule above. Five Gens are live (Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage — see the Gen table). The winner is announced to everyone, eliminated players spectate, and the host can send the whole room back to the lobby for another round without anyone reconnecting. Mobile touch controls (joystick, aim pad, shoot, Gen, and a detonate button for Bomb Voyage) are wired in.
+Reachable from the main menu's **Online (Multiplayer)** button. One player hosts, the others join by the host's IP or a short room code, everyone waits in a room showing who's in (names, chosen Gen, team, host tag, up to 5 players), picks a Gen from a pop-out ring, and the host starts the match. The host chooses **Free-For-All** or **Teams**: in team mode players are dealt onto Team A / Team B (switchable from a pop-out ring), teammates always see each other on the map, there's no friendly fire (your own bomb can still hurt *you*), A spawns down the left edge and B down the right, and the last team standing wins. The arena is a bright 24×16-cell maze (1536×1024) with scattered wall blocks for cover and a camera that follows you; enemies are only visible under the limited-vision rule above. All six Gens are live (Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage, Decoy — see the Gen table). Your own movement is predicted locally and reconciled against the host; players who lag are dimmed and tagged, and a dropped connection leaves a dimmed avatar in the match for a grace period instead of vanishing. The winner is announced to everyone, eliminated players spectate, and the host can send the whole room back to the lobby for another round without anyone reconnecting. Mobile touch controls (joystick, aim pad, shoot, Gen, and a detonate button for Bomb Voyage) are wired in.
 
 ---
 
@@ -101,7 +101,7 @@ The online versions live in `scripts/net/gens.gd` (`Gens.DEFS`) and `net_player.
 |---|---|---|
 | **Camouflage** | Disguises as a crate for up to **60 seconds**. Can move/reposition/scout freely while disguised — but **cannot attack** in that state, and is still fully killable. To attack, the player must **manually drop the disguise first** (press the Gen key again) — a deliberate, player-initiated action, not an automatic cancel-into-shoot — creating a real exposed beat before they can fire. | ✅ Built — crate sprite, name tag hidden, shooting blocked server-side, Q again to drop, 20s cooldown |
 | **Shield** *(renamed from Bulwark)* | A 360° shield around the player, lasting up to **30 seconds**, that degrades as it absorbs incoming damage and breaks/drops once it's taken enough | ✅ Built — soaks 4 hits (bombs count as 3), the breaking hit is fully absorbed, visible ring fades with remaining strength, 25s cooldown |
-| **Decoy** | Spawns an AI clone that locks onto and hunts one specific opposing player | ✅ Built in local Versus · ❌ Not online yet (needs the AI/pathfinding port; shown disabled in the online lobby) |
+| **Decoy** | Spawns an AI clone that locks onto and hunts one specific opposing player | ✅ Built in local Versus · ✅ Online: a clone wearing the caster's color and name tag (enemies can't tell it from a player; the caster and team see a faint ring) hunts the nearest enemy through the maze via grid pathfinding, deals 1 damage per 0.8s on contact, has 3 HP, dies to any enemy's shots, and expires after 20s; 25s cooldown |
 | **Poltergeist** *(renamed from Heavy Gunner)* | Tags one enemy player with a tracking mark — for the Gen's duration, the caster can always see that tagged player's position, piercing the normal limited-vision rule | ✅ Built — haunts the nearest living enemy for 20s, caster sees them anywhere with a purple marker, 25s cooldown |
 | **Blackout** | Darkens the whole arena for everyone *except* the caster for **30 seconds** — the caster alone gets a **night-vision view** of the dark arena | ✅ Built — everyone else gets a near-black world with only a small personal glow (walls cast real shadows) and their vision shrinks to 70px with no cone; the caster keeps normal vision under a green night-vision tint; 40s cooldown |
 | **Bomb Voyage** | Drop up to **5 bombs**. Each bomb is set, per-drop, to one of two trigger modes: **proximity** (auto-detonates when an enemy player gets close enough) or **manual** (caster detonates it on command). The caster can always see their own dropped bombs' locations on the map, regardless of range — enemies never see them | ✅ Built — tap Q: proximity (48px trigger), hold Q: manual, E: detonate all manual bombs; 90px blast for 3 damage, hits the owner too; 1s between drops |
@@ -112,8 +112,8 @@ The online versions live in `scripts/net/gens.gd` (`Gens.DEFS`) and `net_player.
 ### Open decisions before deeper implementation
 These are the things worth pinning down before sinking real time into the networking layer, since getting them wrong costs real rework:
 1. **Where does the server run?** Researched: free hosting tiers that sleep-on-idle (Render, Railway) or have been discontinued don't work for an always-on game server. **Oracle Cloud's "Always Free" tier** is the one genuinely-permanent free option found — recommended starting point once the networking layer is ready to deploy.
-2. **Gen tuning** — every duration, cooldown, radius and damage number above is a first guess that needs real matches; and the online **Decoy** port
-3. **Team-assignment UI visual** — the backend (mode toggle, per-player picker) is built; the actual "pop-out" visual is explicitly left for later, to be built separately
+2. **Gen tuning** — every duration, cooldown, radius and damage number above is a first guess that needs real matches (the online Decoy in particular kills a stationary player in ~4 seconds)
+3. **Team/Gen picker visual** — built as the pop-out ring (`radial_picker.gd`) in the online lobby; art/animation polish is a later pass
 4. **Custom art** — once sprite files are provided for how players should look, they slot into the existing placeholder-swap pattern (every visual in this project so far is a flat shape or procedural texture specifically so it can be swapped for real art later — same approach applies here)
 5. Whether Solo/local Versus stay as permanent separate offline modes, or eventually fold into the same arena content — **decided for now: they stay separate**, untouched while work focuses on the web multiplayer pivot
 6. **Limited vision range tuning** — exact vision cone/radius numbers for the new "can't see other players by default" rule aren't picked yet; needs playtesting once it's implemented
@@ -321,6 +321,8 @@ VersusArena (Control, versus_manager.gd)
 | `net_arena.gd` | The online match (host-authoritative): waits for every client to report its arena loaded before spawning anyone (a spawn sent to a peer without the arena is lost, not queued), spawns players and bombs via `MultiplayerSpawner`s, runs the vision rule, Blackout darkness and bomb triggers/blasts, tracks eliminations/leavers, declares the winner, broadcasts status/announcements, and despawns cleanly before sending everyone back to the lobby |
 | `net_player.gd` *(`NetPlayer`)* | Server-authoritative networked player: server simulates remote movement from received input, owns hit detection (its own position, not a client-supplied one; server-enforced fire cooldown) and the whole Gen state machine (ready → active → cooldown, with camouflage/shield/haunt/bomb state replicated); the owning client predicts its own movement locally (no reconciliation yet — corrections can snap). Mouse or touch-pad aim, tracers, name tag, per-player color, crate disguise, shield ring, haunt marker, Blackout glow light, dimmed death state |
 | `gens.gd` *(`Gens`)* | The online Gen table — labels, durations, cooldowns, per-Gen numbers, availability — read by the lobby, the HUD and the server logic |
+| `net_decoy.gd` *(`NetDecoy`)* | The online Decoy: host-simulated clone that paths through the maze (A* grid built in `net_arena.gd` from the Maze layout), hits on contact, takes damage from enemy shots, expires; clients just glide it to the replicated position |
+| `radial_picker.gd` *(`RadialPicker`)* | Reusable pop-out picker: a hub button that fans its options into a ring (tweened, overlays neighbouring UI). Used for Gen and Team selection in the online lobby |
 | `net_bomb.gd` *(`NetBomb`)* | A placed Bomb Voyage bomb: static marker carrying owner + trigger mode; the arena decides when it blows |
 | `net_hud.gd` | Online HUD: HP, alive count, Gen state + contextual hint, status line, timed announcements, the touch controls (incl. Gen and detonate buttons), Blackout night-vision tint, and the end-of-match overlay |
 
@@ -346,7 +348,7 @@ VersusArena (Control, versus_manager.gd)
 - [x] On-screen virtual joystick for touch (movement)
 - [x] Touch-drag aim pad + on-screen shoot button
 - [x] Local split-screen Versus mode: per-player cameras, PvP damage, unique Gens, win/results screen
-- [x] 5 of 6 Gens implemented: Camouflage, Shield (placeholder), Decoy, Heavy Gunner/Poltergeist (old mechanic, rename pending), Blackout
+- [x] Local Versus Gens (original effects): Camouflage, Shield (placeholder), Decoy, Heavy Gunner, Blackout — the redesigned versions live in the online mode
 - [x] Gen-selection lobby (FFA/Team toggle + per-player Gen picker) wired in from the main menu
 - [x] Real WebSocket client-server networking (`Network` autoload, `NetPlayer`/`NetArena`) — server-authoritative movement + hit detection
 - [x] First playable online match: host/join lobby with named roster and 5-player cap, arena-ready handshake, eliminations → winner → results → back to lobby, net HUD with touch controls — verified end-to-end across three separate processes (host + 2 clients)
@@ -359,12 +361,13 @@ VersusArena (Control, versus_manager.gd)
 - [x] Limited player vision online (ring + forward cone + line of sight, firing reveals you) — first-pass numbers, client-side
 - [x] Online Gens: Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage — picked in the online lobby, server-authoritative, verified host + 2 clients
 - [x] Online team mode: host toggles FFA/Teams, auto-dealt A/B with switching, teammates always visible, no friendly fire, team spawns, last team standing wins — verified host + 2 clients
-- [ ] Online Decoy (needs the AI clone ported to the networked arena)
-- [ ] Movement smoothing online: reconciliation for your own avatar, interpolation for everyone else's
-- [ ] Laggy/disconnected players staying in the match dimmed instead of being removed
-- [ ] Matchmaking / room codes — joining is by the host's IP address for now
+- [x] All six Gens online, including the Decoy port (clone + A* pathfinding on the Maze grid)
+- [x] Online movement smoothing: your own avatar reconciles against the host (snap only on real drift, ease together once stopped), others' avatars glide to the replicated position; verified over loopback only — real-latency behaviour needs the real-build test
+- [x] Laggy/dropped players stay in, dimmed: 3s of silence marks you lagging, a dropped connection leaves a dimmed killable avatar for a grace period, a deliberate Leave removes you at once
+- [x] Room codes (an 8-character, checksummed encoding of the host's address — typos are rejected). **Not** a matchmaking service: there's no server to look rooms up on yet, so it's only as reachable as the address inside it
+- [ ] Real matchmaking (a room list / lookup on a hosted server) — needs the always-on server
 - [ ] Confirming the earlier intermittent WebSocket disconnect is gone — it did not appear in any of this session's three-process runs, but still needs a check on real exported builds
-- [ ] Team-assignment UI visual (the pop-out/radial look) — backend logic exists, visual layer doesn't
+- [x] Pop-out radial pickers for Gen and Team in the online lobby (placeholder styling)
 - [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
 - [ ] Input rebinding menu
 - [ ] Real art/sound assets (everything is placeholder shapes + silent hooks)
@@ -395,7 +398,7 @@ The original plan was a 3-month, 5-level solo horror game shipping by September 
 
 **Online play has its first playable version:** a real WebSocket client-server layer (`Network` autoload + `NetPlayer`/`NetArena`) with a host/join lobby, a named roster, a 5-player cap, a full match loop (spawn, eliminations, winner announced, results screen, back to the lobby for another round) and a HUD with touch controls — all verified end-to-end across three genuinely separate OS processes (a host and two clients), not just in-editor. It's deliberately a bare, lit, cover-free box so the loop could be proven solid before the design layers on. The intermittent disconnect seen in earlier prototype testing did not reappear in any of this session's runs, but it still needs confirming on real exported builds.
 
-**The online game now has its design in it:** the maze arena with cover, the limited-vision rule, five of the six Gens (Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage) and FFA/Team modes, all running server-authoritatively and verified across three real processes. **What's next:** testing on real exported builds (the Phase 1 check for the old intermittent disconnect), the online Decoy port, movement smoothing, the team-assignment visual, graceful handling of laggy players, and then a proper balance pass on every Gen number once people have actually played. Open decisions are listed in that section (server hosting — Oracle Cloud Always Free recommended — and tuning).
+**The online game now has its design in it:** the maze arena with cover, the limited-vision rule, all six Gens (Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage, Decoy), FFA/Team modes, smoothed movement, lag/disconnect handling, pop-out pickers and room codes, all running server-authoritatively and verified across three real processes. **What's next:** testing on real exported builds (the Phase 1 check for the old intermittent disconnect), real matchmaking (needs the hosted server), and then a proper balance pass on every Gen number once people have actually played. Open decisions are listed in that section (server hosting — Oracle Cloud Always Free recommended — and tuning).
 
 ### Other ideas under consideration (not committed)
 - A co-op mode (two players vs. AI monsters together) — the shared-midpoint `arena_camera.gd` was built with this in mind
@@ -422,7 +425,7 @@ Export presets for **Windows Desktop** and **Web** are committed in `export_pres
 
 1. Double-click **`export_windows.bat`** → `builds/windows/VOIDLIGHT.exe` (self-contained, no `.pck` beside it).
 2. **Same PC:** run two copies. In one: Online → Host. In the other: Online → Host IP `127.0.0.1` → Join.
-3. **Same Wi-Fi:** the host's room shows `Friends on your Wi-Fi join with: 192.168.x.x` — that's what the other machine types in. If Windows pops a firewall prompt the first time you host, allow it.
+3. **Same Wi-Fi:** the host's room shows `Friends on your Wi-Fi join with: 192.168.x.x or code XXXX-XXXX` — the other machine types either into the Host IP / code box (a code is just that address in a short checksummed form; `ip:port` also works for a non-default port). If Windows pops a firewall prompt the first time you host, allow it.
 4. **Web:** `export_web.bat` → `builds/web/`. A browser can't open it from the folder — serve it (`cd builds/web` then `python -m http.server 8000`, open `http://localhost:8000`). Browsers can only *join*; the host must be the desktop build (a browser page can't listen for connections). Over plain `http://` the game connects with `ws://`, which is fine on a LAN.
 5. **Internet:** not yet — that needs the always-on hosted server (see open decisions) or the host to port-forward 9050.
 
