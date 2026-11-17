@@ -26,6 +26,10 @@ const EXPLOSION_COLOR := Color(1.0, 0.6, 0.2, 0.8)
 const BLACKOUT_VISION_RADIUS := 70.0
 const BLACKOUT_COLOR := Color(0.06, 0.06, 0.08)
 
+## How long a dropped player's dimmed avatar stays in the match before the
+## host eliminates it. Short outages are really just lag and never get here.
+@export var ghost_grace := 20.0
+
 @onready var players_root: Node2D = $Players
 @onready var bombs_root: Node2D = $Bombs
 @onready var spawner: MultiplayerSpawner = $MultiplayerSpawner
@@ -116,6 +120,7 @@ func _begin_match() -> void:
 	if _match_started:
 		return
 	_match_started = true
+	Network.mark_all_heard()
 	_spawn_for_peer(1)
 	for id in Network.players:
 		if id != 1 and Network.ready_peers.has(id):
@@ -135,7 +140,10 @@ func _spawn_for_peer(id: int) -> void:
 		pos = slots[_team_count(team) % slots.size()]
 	else:
 		pos = _spawn_points[_participants.size() % _spawn_points.size()]
-	var data := {"id": id, "pos": pos, "gen": Network.player_gen(id), "team": team}
+	var data := {
+		"id": id, "pos": pos, "gen": Network.player_gen(id), "team": team,
+		"name": Network.player_name(id),
+	}
 	var node := spawner.spawn(data) as NetPlayer
 	node.died.connect(_on_player_died)
 	_participants.append(id)
@@ -158,6 +166,7 @@ func _spawn_player(data: Dictionary) -> Node:
 	player.owner_peer_id = data["id"]
 	player.gen = data["gen"]
 	player.team = data["team"]
+	player.display_name = data["name"]
 	player.position = data["pos"]
 	player.configure_replication()
 	return player
@@ -167,21 +176,46 @@ func _spawn_player(data: Dictionary) -> Node:
 # Eliminations / win (host)
 # ---------------------------------------------------------------------------
 
+## The roster entry is gone once someone disconnects, so names come from
+## the avatar, which carries its own.
+func _name_of(id: int) -> String:
+	var node := players_root.get_node_or_null(str(id)) as NetPlayer
+	if node and node.display_name != "":
+		return node.display_name
+	return Network.player_name(id)
+
+
 func _on_player_died(id: int) -> void:
-	_announce.rpc("%s was eliminated" % Network.player_name(id))
+	_announce.rpc("%s was eliminated" % _name_of(id))
 	_check_win()
 
 
 func _on_peer_disconnected(id: int) -> void:
 	var node := players_root.get_node_or_null(str(id)) as NetPlayer
-	if node:
+	var left_on_purpose := Network.left_cleanly.has(id)
+	Network.left_cleanly.erase(id)
+	if node == null:
+		_participants.erase(id)
+		_check_win()
+		return
+	var who := _name_of(id)
+	# Left on purpose, never really started, or already out: remove outright.
+	if left_on_purpose or not _match_started or node.dead:
 		if node.gen == "blackout" and blackout_by == id:
 			end_blackout(id)
 		node.queue_free()
-	if _match_started:
-		_announce.rpc("%s left the match" % Network.player_name(id))
-	_participants.erase(id)
-	_check_win()
+		if _match_started:
+			_announce.rpc("%s left the match" % who)
+		_participants.erase(id)
+		_check_win()
+		return
+	# Dropped mid-fight: stay in, dimmed and standing still, for a grace period.
+	node.mark_connection_lost()
+	_announce.rpc("%s lost connection" % who)
+	await get_tree().create_timer(ghost_grace).timeout
+	if is_instance_valid(node) and not node.dead and node.link_state == 2:
+		_announce.rpc("%s timed out" % who)
+		node.force_eliminate()
 
 
 func _alive_ids() -> Array[int]:
@@ -210,7 +244,7 @@ func _check_win() -> void:
 		if alive.size() > 1:
 			return
 		if alive.size() == 1:
-			text = "%s wins!" % Network.player_name(alive[0])
+			text = "%s wins!" % _name_of(alive[0])
 	_match_over = true
 	_show_results.rpc(text)
 

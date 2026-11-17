@@ -55,6 +55,14 @@ var rtt_ms := 0.0
 ## Switchable so a test can simulate a client going quiet.
 var heartbeat_enabled := true
 var _heartbeat_timer := 0.0
+var _leaving := false
+
+## Host only. A client silent for this long is "lagging" (dimmed, not dropped).
+const LAG_SECONDS := 3.0
+## Host only: peers who pressed Leave (as opposed to crashing/dropping), so
+## the arena can remove them at once instead of keeping a dimmed avatar.
+var left_cleanly: Dictionary = {}
+var _last_heard: Dictionary = {}
 
 ## A WebSocketMultiplayerPeer is RefCounted — holding it here too (not just
 ## in multiplayer.multiplayer_peer) guards against it being freed out from
@@ -86,7 +94,31 @@ func _process(delta: float) -> void:
 @rpc("any_peer", "call_remote", "unreliable")
 func _ping(sent_msec: int) -> void:
 	if is_host():
-		_pong.rpc_id(multiplayer.get_remote_sender_id(), sent_msec)
+		var id := multiplayer.get_remote_sender_id()
+		_last_heard[id] = Time.get_ticks_msec()
+		_pong.rpc_id(id, sent_msec)
+
+
+## Host only. 0 = fine, 1 = hasn't been heard from lately. The host itself
+## is never laggy.
+func link_state(id: int) -> int:
+	if id == 1 or not _last_heard.has(id):
+		return 0
+	return 1 if Time.get_ticks_msec() - _last_heard[id] > int(LAG_SECONDS * 1000.0) else 0
+
+
+## Resets everyone's "last heard" clock — scene loads stall heartbeats, and a
+## fresh match shouldn't start with people already marked as lagging.
+func mark_all_heard() -> void:
+	var now := Time.get_ticks_msec()
+	for id in players:
+		_last_heard[id] = now
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _bye() -> void:
+	if is_host():
+		left_cleanly[multiplayer.get_remote_sender_id()] = true
 
 
 @rpc("authority", "call_remote", "unreliable")
@@ -100,7 +132,7 @@ func is_host() -> bool:
 
 
 func is_connected_to_match() -> bool:
-	return multiplayer.has_multiplayer_peer() \
+	return not _leaving and multiplayer.has_multiplayer_peer() \
 		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
 
 
@@ -216,6 +248,17 @@ func join(address: String, port: int = DEFAULT_PORT) -> Error:
 
 
 func leave() -> void:
+	var current := multiplayer.multiplayer_peer
+	# Say goodbye first so the host can tell leaving from crashing. The
+	# short wait lets the message out before the socket closes; meanwhile
+	# we already count as disconnected so the UI doesn't show a live room.
+	if current and not multiplayer.is_server() and match_in_progress and is_connected_to_match():
+		_leaving = true
+		_bye.rpc_id(1)
+		await get_tree().create_timer(0.15).timeout
+		_leaving = false
+		if multiplayer.multiplayer_peer != current:
+			return  # a new connection was started meanwhile; leave it alone
 	if multiplayer.multiplayer_peer:
 		multiplayer.multiplayer_peer.close()
 		multiplayer.multiplayer_peer = null
@@ -236,6 +279,8 @@ func start_match() -> void:
 		return
 	match_in_progress = true
 	ready_peers.clear()
+	left_cleanly.clear()
+	mark_all_heard()
 	_load_scene.rpc(ARENA_SCENE)
 	_load_scene(ARENA_SCENE)
 
@@ -283,6 +328,7 @@ func _register(raw_name: String, gen: String) -> void:
 	if not is_host():
 		return
 	var id := multiplayer.get_remote_sender_id()
+	_last_heard[id] = Time.get_ticks_msec()
 	var cleaned := raw_name.strip_edges().substr(0, MAX_NAME_LENGTH)
 	players[id] = {
 		"name": cleaned if cleaned != "" else "Player %d" % id,
@@ -359,6 +405,7 @@ func _on_peer_disconnected(id: int) -> void:
 	if is_host():
 		players.erase(id)
 		ready_peers.erase(id)
+		_last_heard.erase(id)
 		_broadcast_players()
 
 

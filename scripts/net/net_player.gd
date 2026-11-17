@@ -77,6 +77,12 @@ var poltergeist_target := 0
 var bombs_placed := 0
 var net_pos := Vector2.ZERO
 var net_rot := 0.0
+## 0 fine, 1 lagging (host hasn't heard from them lately), 2 connection lost
+## (kept in the match, dimmed, until the host's grace period runs out).
+var link_state := 0
+## Travels with the avatar from spawn so it survives the roster entry being
+## erased when the player drops.
+var display_name := ""
 
 ## Local-only presentation state.
 var dbg_snaps := 0  # times the owner was snapped back to the server (diagnostic)
@@ -128,7 +134,7 @@ func _exit_tree() -> void:
 func configure_replication() -> void:
 	var sync := get_node("MultiplayerSynchronizer") as MultiplayerSynchronizer
 	var config := SceneReplicationConfig.new()
-	for prop in ["net_pos", "net_rot", "hp", "dead", "gen_state", "gen_timer",
+	for prop in ["net_pos", "net_rot", "link_state", "hp", "dead", "gen_state", "gen_timer",
 			"camouflaged", "shield_hp", "poltergeist_target", "bombs_placed"]:
 		var path := NodePath(".:%s" % prop)
 		config.add_property(path)
@@ -150,7 +156,13 @@ func is_enemy(other: NetPlayer) -> bool:
 
 
 func _refresh_name() -> void:
-	name_label.text = Network.player_name(owner_peer_id)
+	var base := display_name if display_name != "" else Network.player_name(owner_peer_id)
+	match link_state:
+		1:
+			base += " (lagging)"
+		2:
+			base += " (connection lost)"
+	name_label.text = base
 
 
 # ---------------------------------------------------------------------------
@@ -195,9 +207,11 @@ func _process(delta: float) -> void:
 		_smooth_remote(delta)
 	name_label.rotation = -rotation
 	disguise.rotation = -rotation
-	var alpha := 0.25 if dead else 1.0
+	var alpha := 0.25 if dead else (0.45 if link_state != 0 else 1.0)
 	visual.modulate.a = alpha
+	disguise.modulate.a = alpha
 	name_label.modulate.a = alpha
+	_refresh_name()
 	visual.visible = not camouflaged
 	disguise.visible = camouflaged
 	name_label.visible = not camouflaged
@@ -235,6 +249,7 @@ func _physics_process(delta: float) -> void:
 	_cooldown_left = maxf(0.0, _cooldown_left - delta)
 	if multiplayer.is_server():
 		_server_gen_tick(delta)
+		_server_link_tick()
 	if not dead:
 		if _is_mine():
 			_local_update(delta)
@@ -434,6 +449,28 @@ func _server_gen_tick(delta: float) -> void:
 	else:
 		gen_state = GenState.READY
 		gen_timer = 0.0
+
+
+func _server_link_tick() -> void:
+	if link_state == 2:
+		_input_dir = Vector2.ZERO  # a lost connection stands still
+	else:
+		link_state = Network.link_state(owner_peer_id)
+
+
+## Host: the connection dropped. The avatar stays (dimmed, still killable)
+## so the match keeps going around it; the arena eliminates it after a grace.
+func mark_connection_lost() -> void:
+	link_state = 2
+	_input_dir = Vector2.ZERO
+
+
+func force_eliminate() -> void:
+	if dead:
+		return
+	hp = 0
+	dead = true
+	died.emit(owner_peer_id)
 
 
 func _nearest_enemy() -> NetPlayer:
