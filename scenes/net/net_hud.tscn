@@ -45,6 +45,23 @@ offset_bottom = 112.0
 theme_override_font_sizes/font_size = 13
 modulate = Color(1, 1, 1, 0.75)
 
+[node name="MicLabel" type="Label" parent="."]
+offset_left = 12.0
+offset_top = 114.0
+offset_right = 320.0
+offset_bottom = 136.0
+theme_override_font_sizes/font_size = 13
+modulate = Color(0.7, 1, 0.8, 0.85)
+
+[node name="MicButton" type="Button" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -96.0
+offset_top = 10.0
+offset_right = -12.0
+offset_bottom = 42.0
+text = "Mic"
+
 [node name="StatusLabel" type="Label" parent="."]
 anchor_left = 0.5
 anchor_right = 0.5
@@ -147,5 +164,6 @@ text = "Return to Lobby"
 [node name="LeaveButton" type="Button" parent="Results/VBox"]
 text = "Leave"
 
+[connection signal="pressed" from="MicButton" to="." method="_on_mic_pressed"]
 [connection signal="pressed" from="Results/VBox/ReturnButton" to="." method="_on_return_pressed"]
 [connection signal="pressed" from="Results/VBox/LeaveButton" to="." method="_on_leave_pressed"]

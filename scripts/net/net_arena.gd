@@ -317,6 +317,11 @@ func _spawn_bomb(data: Dictionary) -> Node:
 	return bomb
 
 
+func is_player_dead(id: int) -> bool:
+	var node := player_node(id)
+	return node != null and node.dead
+
+
 func player_node(id: int) -> NetPlayer:
 	return players_root.get_node_or_null(str(id)) as NetPlayer
 
@@ -519,6 +524,7 @@ func _update_hud(me: NetPlayer) -> void:
 	else:
 		hud.set_alive(alive, total)
 	hud.set_gen(me)
+	hud.set_mic(Voice.status_text())
 	if me:
 		hud.set_hp(me.hp, me.max_hp)
 		if me.dead and not _match_over:

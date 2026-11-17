@@ -13,6 +13,7 @@ const ANNOUNCE_SECONDS := 3.0
 @onready var alive_label: Label = $AliveLabel
 @onready var gen_label: Label = $GenLabel
 @onready var hint_label: Label = $HintLabel
+@onready var mic_label: Label = $MicLabel
 @onready var status_label: Label = $StatusLabel
 @onready var announce_label: Label = $AnnounceLabel
 @onready var night_vision: ColorRect = $NightVision
@@ -50,6 +51,14 @@ func set_alive(alive: int, total: int) -> void:
 
 func set_alive_text(text: String) -> void:
 	alive_label.text = text
+
+
+func set_mic(text: String) -> void:
+	mic_label.text = text
+
+
+func _on_mic_pressed() -> void:
+	Voice.set_muted(not Voice.muted)
 
 
 func set_status(text: String) -> void:

@@ -227,6 +227,10 @@ func _draw() -> void:
 	if haunted:
 		draw_arc(Vector2.ZERO, 26.0, 0.0, TAU, 24, HAUNT_COLOR, 2.0)
 		draw_circle(Vector2(0, -44).rotated(-rotation), 5.0, HAUNT_COLOR)
+	if Voice.is_speaking(owner_peer_id):
+		var at := Vector2(0, -56).rotated(-rotation)
+		draw_circle(at, 4.0, Color(0.4, 1.0, 0.5))
+		draw_arc(at, 7.0, 0.0, TAU, 16, Color(0.4, 1.0, 0.5, 0.5), 1.5)
 	if not _is_mine():
 		return
 	# Faint guides for your own vision: the close ring and the forward cone's

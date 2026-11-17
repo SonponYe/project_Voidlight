@@ -19,6 +19,7 @@ extends Control
 @onready var leave_button: Button = $VBox/RoomPanel/RoomButtons/LeaveButton
 @onready var gen_radial: RadialPicker = $VBox/RoomPanel/GenRadial
 @onready var gen_blurb: Label = $VBox/RoomPanel/GenBlurb
+@onready var mic_button: Button = $VBox/RoomPanel/RoomButtons/MicButton
 @onready var ffa_button: Button = $VBox/RoomPanel/ModeRow/FFAButton
 @onready var team_mode_button: Button = $VBox/RoomPanel/ModeRow/TeamButton
 @onready var team_radial: RadialPicker = $VBox/RoomPanel/TeamRadial
@@ -111,6 +112,7 @@ func _refresh_gen_buttons() -> void:
 func _refresh_room() -> void:
 	if not room_panel.visible:
 		return
+	_update_mic()
 	_refresh_gen_buttons()
 	_refresh_mode_buttons()
 	for child in player_list.get_children():
@@ -132,6 +134,8 @@ func _refresh_room() -> void:
 			if team_counts.has(team):
 				team_counts[team] += 1
 		label.text = "%s%s  —  %s%s" % [side, Network.player_name(id), Gens.label(Network.player_gen(id)), tag]
+		label.set_meta("pid", id)
+		label.set_meta("base", label.text)
 		player_list.add_child(label)
 	room_title.text = "ROOM  —  %d / %d players" % [ids.size(), Network.MAX_PLAYERS]
 	start_button.visible = Network.is_leader()
@@ -227,6 +231,33 @@ func _on_rejected(reason: String) -> void:
 func _on_disconnected() -> void:
 	var reason := Network.last_reject_reason
 	_show_connect(reason if reason != "" else "Disconnected from host.")
+
+
+var _talk_timer := 0.0
+
+
+## Show who is talking next to their name in the room.
+func _process(delta: float) -> void:
+	_talk_timer -= delta
+	if _talk_timer > 0.0 or not room_panel.visible:
+		return
+	_talk_timer = 0.2
+	_update_mic()
+	for label in player_list.get_children():
+		if label is Label and label.has_meta("pid"):
+			label.text = str(label.get_meta("base")) + ("   [talking]" if Voice.is_speaking(label.get_meta("pid")) else "")
+
+
+func _update_mic() -> void:
+	if Voice.muted:
+		mic_button.text = "Mic: Off"
+	else:
+		mic_button.text = "Mic: On" if Voice.available else "Mic: n/a"
+
+
+func _on_mic_pressed() -> void:
+	Voice.set_muted(not Voice.muted)
+	_update_mic()
 
 
 func _on_start_pressed() -> void:
