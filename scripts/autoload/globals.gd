@@ -5,7 +5,9 @@ const STARTING_AMMO := 12
 const STARTING_HP := 3
 const STARTING_LIGHTER_CHARGES := 3
 const AMMO_PICKUP_AMOUNT := 6
-const SAVE_PATH := "user://voidlight_save.save"
+const SAVE_PATH := "user://akira_save.save"
+## The game's old name; read once so an existing high score survives the rename.
+const LEGACY_SAVE_PATH := "user://voidlight_save.save"
 
 ## The 5 named superpowers (a 6th slot is reserved, not yet named) — one
 ## shared table so the lobby (power_select.gd) and the match (versus_
@@ -72,9 +74,10 @@ func save_high_score() -> void:
 
 
 func load_high_score() -> void:
-	if not FileAccess.file_exists(SAVE_PATH):
+	var path := SAVE_PATH if FileAccess.file_exists(SAVE_PATH) else LEGACY_SAVE_PATH
+	if not FileAccess.file_exists(path):
 		return
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var f := FileAccess.open(path, FileAccess.READ)
 	if f:
 		high_score = f.get_32()
 		f.close()

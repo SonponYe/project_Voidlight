@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set "GODOT_EXE=%~dp0godot\Godot.exe"
-set "OUT=%~dp0builds\windows\VOIDLIGHT.exe"
+set "OUT=%~dp0builds\windows\Akira.exe"
 
 if not exist "%GODOT_EXE%" (
     echo Godot not found at "%GODOT_EXE%" -- see run.bat for the one-time setup.

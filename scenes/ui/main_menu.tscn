@@ -39,7 +39,7 @@ alignment = 1
 [node name="TitleLabel" type="Label" parent="VBox" unique_id=131710301]
 layout_mode = 2
 theme_override_font_sizes/font_size = 32
-text = "VOIDLIGHT"
+text = "Akira"
 horizontal_alignment = 1
 
 [node name="SubtitleLabel" type="Label" parent="VBox" unique_id=897970649]

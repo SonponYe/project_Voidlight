@@ -1,4 +1,4 @@
-# VOIDLIGHT
+# Akira
 
 > *You can only see as far as your light allows. But they can hear everything.*
 
@@ -29,9 +29,9 @@ Target Platform: **Web (HTML5)** first — playable in-browser on desktop and mo
 
 ## Concept
 
-VOIDLIGHT started as a solo horror-survival game: you're dropped into a dark arena with nothing but a flashlight and a gun. You can only see what your light touches — everything outside the cone is invisible — but monsters can hear you, especially if you sprint. Turning the light off makes you nearly undetectable, but also blind: no minimap, no maze layout, just your own faint ambient glow to feel your way around.
+Akira started as a solo horror-survival game: you're dropped into a dark arena with nothing but a flashlight and a gun. You can only see what your light touches — everything outside the cone is invisible — but monsters can hear you, especially if you sprint. Turning the light off makes you nearly undetectable, but also blind: no minimap, no maze layout, just your own faint ambient glow to feel your way around.
 
-That same light-vs-detection tension turned out to work just as well **player vs player** — so VOIDLIGHT now also has a local split-screen **Versus** mode: two people on one device, same arena, hunting each other with the same flashlight/stealth mechanics, each with one unique power (soon to be called a **Gen**, see below) that can swing a fight.
+That same light-vs-detection tension turned out to work just as well **player vs player** — so Akira now also has a local split-screen **Versus** mode: two people on one device, same arena, hunting each other with the same flashlight/stealth mechanics, each with one unique power (soon to be called a **Gen**, see below) that can swing a fight.
 
 ---
 
@@ -77,7 +77,7 @@ The original premise — the whole arena is dark, your flashlight is your only v
 - Players with network trouble should **stay in the match, visually dimmed**, rather than being dropped — the match keeps going around them
 
 ### Identity: a tactical, psychological arena shooter
-VOIDLIGHT isn't trying to be another twitch-reflex shooter — the identity is **tactical and psychological**. The core tension isn't just "can you aim," it's "do you know where anyone actually is, and do they know where you are." You can win a fight by going loud and burning your Gen outright, or you can win by baiting an enemy into revealing themselves, wasting their Gen, or walking into a read you set up two minutes earlier. Every match is a running information game as much as a shootout.
+Akira isn't trying to be another twitch-reflex shooter — the identity is **tactical and psychological**. The core tension isn't just "can you aim," it's "do you know where anyone actually is, and do they know where you are." You can win a fight by going loud and burning your Gen outright, or you can win by baiting an enemy into revealing themselves, wasting their Gen, or walking into a read you set up two minutes earlier. Every match is a running information game as much as a shootout.
 
 **Vision is limited, not global.** Players always see the arena layout (map/terrain), but *not* other players by default — only enemies that are close enough or inside your actual view/vision cone are visible, same as a normal line-of-sight shooter. There's no free long-range or minimap tracking of other players. The one deliberate exception is the **Poltergeist** Gen (see below), which pierces this rule for a single tagged target.
 
@@ -395,7 +395,7 @@ VersusArena (Control, versus_manager.gd)
 | Sound effects | [freesound.org](https://freesound.org) | Various (log each file) |
 | Ambient music | TBD | TBD |
 
-> **Rule:** Every asset used in VOIDLIGHT must be listed here with its license before the game ships. No exceptions.
+> **Rule:** Every asset used in Akira must be listed here with its license before the game ships. No exceptions.
 
 ---
 
@@ -432,7 +432,7 @@ The original plan was a 3-month, 5-level solo horror game shipping by September 
 ### Building & testing online play
 Export presets for **Windows Desktop** and **Web** are committed in `export_presets.cfg`. One-time setup: open the project in the editor once and go to **Editor → Manage Export Templates → Download and Install** (the engine's export templates aren't part of the repo).
 
-1. Double-click **`export_windows.bat`** → `builds/windows/VOIDLIGHT.exe` (self-contained, no `.pck` beside it).
+1. Double-click **`export_windows.bat`** → `builds/windows/Akira.exe` (self-contained, no `.pck` beside it).
 2. **Same PC:** run two copies. In one: Online → Host. In the other: Online → Host IP `127.0.0.1` → Join.
 3. **Same Wi-Fi:** the host's room shows `Friends on your Wi-Fi join with: 192.168.x.x or code XXXX-XXXX` — the other machine types either into the Host IP / code box (a code is just that address in a short checksummed form; `ip:port` also works for a non-default port). If Windows pops a firewall prompt the first time you host, allow it.
 4. **Web:** `export_web.bat` → `builds/web/`. A browser can't open it from the folder — serve it (`cd builds/web` then `python -m http.server 8000`, open `http://localhost:8000`). Browsers can only *join*; the host must be the desktop build (a browser page can't listen for connections). Over plain `http://` the game connects with `ws://`, which is fine on a LAN.
@@ -440,7 +440,7 @@ Export presets for **Windows Desktop** and **Web** are committed in `export_pres
 
 ### Running a dedicated server
 - **Try it locally:** `godot --headless --path . -- --server` (optionally `--port=9051`). It prints `[server] ...` lines as people join, matches start and rooms reset. Then join it from game windows like any host (`127.0.0.1`).
-- **For a Linux box (e.g. Oracle Cloud Always Free):** double-click **`export_server.bat`** (needs the export templates, as above) to build `builds/server/voidlight_server.x86_64` and `.arm64` — pick the one matching the server's CPU (Oracle's free ARM machines are arm64). Copy it over, then `chmod +x` it and run `./voidlight_server.x86_64 --headless -- --server --port=9050`. Open TCP 9050 in the server's firewall *and* in the cloud provider's network rules.
+- **For a Linux box (e.g. Oracle Cloud Always Free):** double-click **`export_server.bat`** (needs the export templates, as above) to build `builds/server/akira_server.x86_64` and `.arm64` — pick the one matching the server's CPU (Oracle's free ARM machines are arm64). Copy it over, then `chmod +x` it and run `./akira_server.x86_64 --headless -- --server --port=9050`. Open TCP 9050 in the server's firewall *and* in the cloud provider's network rules.
 - **TLS (`wss://`), for browsers and for privacy:** give the server a certificate with `--tls-cert=<fullchain.pem> --tls-key=<privkey.pem>` (a Let's Encrypt certificate for your domain works) and it speaks `wss://` instead of `ws://`. Players then join by typing `wss://yourdomain` (port 443 is assumed; `wss://yourdomain:9050` for another port) — or just `yourdomain:443`, since port 443 implies TLS. A browser build served from an `https://` page **always** uses `wss://` (browsers refuse plain `ws://` from a secure page), so for browser play the server needs a real domain and certificate. For local testing with a self-signed certificate, start a desktop client with `--tls-trust=<server.crt>` (dev only — it relaxes name checking). **Verified locally with a self-signed certificate** (plain `ws://` is refused by a TLS server, an untrusted certificate is refused, a trusted one connects and plays); **not yet tried** with a real domain, a Let's Encrypt certificate, or an actual browser.
 - The server has not been run on a real Linux machine yet — only as a headless process on Windows with two real clients.
 
@@ -448,4 +448,4 @@ The first real-build test to run is simply: host, join, play a round, play a sec
 
 ---
 
-*VOIDLIGHT — built in Godot 4.7.x — Chief — 2026*
+*Akira — built in Godot 4.7.x — Chief — 2026*
