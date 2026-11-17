@@ -47,6 +47,15 @@ var last_reject_reason := ""
 ## spawns. Cleared at every match start.
 var ready_peers: Dictionary = {}
 
+const HEARTBEAT_INTERVAL := 0.5
+
+## Smoothed round-trip time to the host in ms (clients only; 0 until the
+## first reply). Used to size the owner's prediction-correction threshold.
+var rtt_ms := 0.0
+## Switchable so a test can simulate a client going quiet.
+var heartbeat_enabled := true
+var _heartbeat_timer := 0.0
+
 ## A WebSocketMultiplayerPeer is RefCounted — holding it here too (not just
 ## in multiplayer.multiplayer_peer) guards against it being freed out from
 ## under the connection by anything that doesn't realize the engine-side
@@ -61,6 +70,29 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+
+
+func _process(delta: float) -> void:
+	if not heartbeat_enabled or not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
+		return
+	if not is_connected_to_match():
+		return
+	_heartbeat_timer -= delta
+	if _heartbeat_timer <= 0.0:
+		_heartbeat_timer = HEARTBEAT_INTERVAL
+		_ping.rpc_id(1, Time.get_ticks_msec())
+
+
+@rpc("any_peer", "call_remote", "unreliable")
+func _ping(sent_msec: int) -> void:
+	if is_host():
+		_pong.rpc_id(multiplayer.get_remote_sender_id(), sent_msec)
+
+
+@rpc("authority", "call_remote", "unreliable")
+func _pong(sent_msec: int) -> void:
+	var sample := float(Time.get_ticks_msec() - sent_msec)
+	rtt_ms = sample if rtt_ms == 0.0 else lerpf(rtt_ms, sample, 0.3)
 
 
 func is_host() -> bool:
@@ -179,6 +211,7 @@ func join(address: String, port: int = DEFAULT_PORT) -> Error:
 	multiplayer.multiplayer_peer = peer
 	match_in_progress = false
 	last_reject_reason = ""
+	rtt_ms = 0.0
 	return OK
 
 

@@ -42,6 +42,17 @@ const HAUNT_COLOR := Color(0.8, 0.4, 1.0)
 const BOMB_HOLD_SECONDS := 0.4
 const DISGUISE_SIZE := 44.0
 
+## Movement smoothing. The server's position is replicated as net_pos (NOT
+## as the node's own position, which would overwrite the owner's local
+## prediction every sync). Remote avatars glide toward it; the owner only
+## corrects when it has genuinely drifted.
+const REPLICATION_INTERVAL := 0.05
+const REMOTE_SMOOTH := 18.0
+const TELEPORT_DIST := 300.0
+const SNAP_MIN := 96.0
+const STILL_GRACE := 0.25
+const CORRECT_RATE := 6.0
+
 @export var speed := 160.0
 @export var max_hp := 5
 @export var shoot_range := 400.0
@@ -64,8 +75,12 @@ var camouflaged := false
 var shield_hp := 0
 var poltergeist_target := 0
 var bombs_placed := 0
+var net_pos := Vector2.ZERO
+var net_rot := 0.0
 
 ## Local-only presentation state.
+var dbg_snaps := 0  # times the owner was snapped back to the server (diagnostic)
+var _still_time := 0.0
 var reveal_timer := 0.0
 var haunted := false  # set by net_arena.gd when the LOCAL player is tracking this avatar
 
@@ -87,6 +102,8 @@ var _aim_pad: Control = null
 
 func _ready() -> void:
 	hp = max_hp
+	net_pos = position
+	net_rot = rotation
 	add_to_group("net_player")
 	visual.color = TEAM_COLORS[team] if TEAM_COLORS.has(team) else COLORS[absi(owner_peer_id) % COLORS.size()]
 	disguise.scale = Vector2.ONE * (DISGUISE_SIZE / disguise.texture.get_width())
@@ -111,12 +128,13 @@ func _exit_tree() -> void:
 func configure_replication() -> void:
 	var sync := get_node("MultiplayerSynchronizer") as MultiplayerSynchronizer
 	var config := SceneReplicationConfig.new()
-	for prop in ["position", "rotation", "hp", "dead", "gen_state", "gen_timer",
+	for prop in ["net_pos", "net_rot", "hp", "dead", "gen_state", "gen_timer",
 			"camouflaged", "shield_hp", "poltergeist_target", "bombs_placed"]:
 		var path := NodePath(".:%s" % prop)
 		config.add_property(path)
 		config.property_set_replication_mode(path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
 	sync.replication_config = config
+	sync.replication_interval = REPLICATION_INTERVAL
 
 
 func _is_mine() -> bool:
@@ -139,8 +157,42 @@ func _refresh_name() -> void:
 # Presentation (every peer)
 # ---------------------------------------------------------------------------
 
+func _smooth_remote(delta: float) -> void:
+	if position.distance_to(net_pos) > TELEPORT_DIST:
+		position = net_pos
+	else:
+		position = position.lerp(net_pos, 1.0 - exp(-delta * REMOTE_SMOOTH))
+	rotation = lerp_angle(rotation, net_rot, 1.0 - exp(-delta * REMOTE_SMOOTH))
+
+
+## Owner only (clients). Our prediction normally matches the server; this
+## only acts on real drift. Snap when the gap is bigger than latency alone
+## can explain; when standing still, ease the last few pixels together —
+## but only after the server has had time to catch up to where we stopped,
+## otherwise we'd tug ourselves back toward its stale, mid-walk position.
+func _reconcile(delta: float, dir: Vector2) -> void:
+	var rtt := Network.rtt_ms / 1000.0
+	var snap_dist := maxf(SNAP_MIN, speed * rtt * 1.5 + 32.0)
+	if position.distance_to(net_pos) > snap_dist:
+		position = net_pos
+		dbg_snaps += 1
+		return
+	if dir != Vector2.ZERO:
+		_still_time = 0.0
+		return
+	_still_time += delta
+	if _still_time > rtt + STILL_GRACE:
+		position = position.lerp(net_pos, 1.0 - exp(-delta * CORRECT_RATE))
+
+
 func _process(delta: float) -> void:
+	# After the host drops, the arena lingers behind the "lost connection"
+	# overlay with no peer assigned; asking multiplayer anything then errors.
+	if not multiplayer.has_multiplayer_peer():
+		return
 	reveal_timer = maxf(0.0, reveal_timer - delta)
+	if not multiplayer.is_server() and not _is_mine():
+		_smooth_remote(delta)
 	name_label.rotation = -rotation
 	disguise.rotation = -rotation
 	var alpha := 0.25 if dead else 1.0
@@ -178,21 +230,23 @@ func _draw() -> void:
 # ---------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
+	if not multiplayer.has_multiplayer_peer():
+		return
 	_cooldown_left = maxf(0.0, _cooldown_left - delta)
 	if multiplayer.is_server():
 		_server_gen_tick(delta)
-	if dead:
-		return
-	if _is_mine():
-		_local_update(delta)
-		return
-	# Remote avatars: only the server drives movement from received input;
-	# a client rendering ANOTHER player just displays whatever the
-	# synchronizer last replicated.
+	if not dead:
+		if _is_mine():
+			_local_update(delta)
+		elif multiplayer.is_server():
+			# Remote avatars: only the server drives movement from received
+			# input; clients render them from net_pos (see _smooth_remote).
+			velocity = _input_dir * speed
+			move_and_slide()
+			rotation = _aim
 	if multiplayer.is_server():
-		velocity = _input_dir * speed
-		move_and_slide()
-		rotation = _aim
+		net_pos = position
+		net_rot = rotation
 
 
 func _local_update(delta: float) -> void:
@@ -206,6 +260,8 @@ func _local_update(delta: float) -> void:
 			_send_move.rpc_id(1, dir)
 	velocity = dir * speed
 	move_and_slide()
+	if not multiplayer.is_server():
+		_reconcile(delta, dir)
 
 	if _aim_pad and _aim_pad.visible:
 		_aim = _aim_pad.get_vector().angle()
