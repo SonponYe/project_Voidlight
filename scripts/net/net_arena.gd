@@ -498,7 +498,7 @@ func _show_results(text: String) -> void:
 # ---------------------------------------------------------------------------
 
 func _local_player() -> NetPlayer:
-	if not multiplayer.has_multiplayer_peer():
+	if not Network.has_peer():
 		return null
 	return players_root.get_node_or_null(str(multiplayer.get_unique_id())) as NetPlayer
 

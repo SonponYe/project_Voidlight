@@ -48,6 +48,9 @@ var last_reject_reason := ""
 ## (--server on the command line, or a Godot dedicated-server export).
 var dedicated := false
 var _join_seq := 0
+## Dev only: a self-signed server certificate this client should accept
+## (--tls-trust=<file>). Real certificates (Let's Encrypt etc.) need nothing.
+var tls_trust_path := ""
 
 ## Server-only: peers whose arena scene is loaded and ready to receive
 ## spawns. Cleared at every match start.
@@ -85,6 +88,9 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	var args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
+	for a in args:
+		if a.begins_with("--tls-trust="):
+			tls_trust_path = a.trim_prefix("--tls-trust=")
 	if OS.has_feature("dedicated_server") or "--server" in args:
 		dedicated = true
 		_boot_dedicated.call_deferred(args)
@@ -92,15 +98,31 @@ func _ready() -> void:
 
 func _boot_dedicated(args: PackedStringArray) -> void:
 	var port := DEFAULT_PORT
+	var cert_path := ""
+	var key_path := ""
 	for a in args:
 		if a.begins_with("--port="):
 			port = int(a.trim_prefix("--port="))
-	var err := host(port)
+		elif a.begins_with("--tls-cert="):
+			cert_path = a.trim_prefix("--tls-cert=")
+		elif a.begins_with("--tls-key="):
+			key_path = a.trim_prefix("--tls-key=")
+	var tls: TLSOptions = null
+	if cert_path != "" or key_path != "":
+		var cert := X509Certificate.new()
+		var key := CryptoKey.new()
+		if cert_path == "" or key_path == "" or cert.load(cert_path) != OK or key.load(key_path) != OK:
+			push_error("TLS needs both --tls-cert and --tls-key, and both must be readable PEM files")
+			get_tree().quit(1)
+			return
+		tls = TLSOptions.server(key, cert)
+	var err := host(port, tls)
 	if err != OK:
 		push_error("Dedicated server could not listen on port %d (error %d)" % [port, err])
 		get_tree().quit(1)
 		return
-	_server_log("dedicated server listening on port %d (max %d players)" % [port, MAX_PLAYERS])
+	_server_log("dedicated server listening on port %d (max %d players, %s)" % [
+		port, MAX_PLAYERS, "wss:// TLS" if tls else "plain ws://"])
 	get_tree().change_scene_to_file(IDLE_SCENE)
 
 
@@ -110,7 +132,7 @@ func _server_log(msg: String) -> void:
 
 
 func _process(delta: float) -> void:
-	if not heartbeat_enabled or not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
+	if not heartbeat_enabled or not has_peer() or multiplayer.is_server():
 		return
 	if not is_connected_to_match():
 		return
@@ -156,8 +178,23 @@ func _pong(sent_msec: int) -> void:
 	rtt_ms = sample if rtt_ms == 0.0 else lerpf(rtt_ms, sample, 0.3)
 
 
+## Godot's default peer is an OfflineMultiplayerPeer that reports itself as a
+## *connected server with id 1*, so has_multiplayer_peer() is true — and
+## is_server() too — before anything has been hosted or joined. Everything
+## here asks this instead.
+func has_peer() -> bool:
+	var peer := multiplayer.multiplayer_peer
+	return peer != null and not (peer is OfflineMultiplayerPeer)
+
+
+## Back to the offline default (what "no connection" looks like).
+func _drop_peer() -> void:
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	_peer = null
+
+
 func is_host() -> bool:
-	return multiplayer.has_multiplayer_peer() and multiplayer.is_server()
+	return has_peer() and multiplayer.is_server()
 
 
 ## The room leader controls Start, the mode, and Return to Lobby: whoever has
@@ -178,7 +215,7 @@ func leader_id() -> int:
 
 
 func is_leader() -> bool:
-	return multiplayer.has_multiplayer_peer() and multiplayer.get_unique_id() == leader_id()
+	return has_peer() and multiplayer.get_unique_id() == leader_id()
 
 
 ## Whether a match could start right now. The host re-checks this itself, so
@@ -197,7 +234,7 @@ func can_start() -> bool:
 
 
 func is_connected_to_match() -> bool:
-	return not _leaving and multiplayer.has_multiplayer_peer() \
+	return not _leaving and has_peer() \
 		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
 
 
@@ -288,23 +325,40 @@ static func decode_room_code(text: String) -> Dictionary:
 	return {"address": address, "port": port}
 
 
-## What a player typed into the join box → {"address", "port"} or {}.
-## Accepts "192.168.1.5", "192.168.1.5:9051", a hostname with a dot, or a
-## room code.
+## What a player typed into the join box → {"address", "port", "tls"} or {}.
+## Accepts "192.168.1.5", "192.168.1.5:9051", a hostname with a dot, a
+## "ws://" or "wss://" address (wss defaults to port 443), or a room code.
+## Port 443 implies TLS.
 static func parse_join_target(text: String) -> Dictionary:
 	var t := text.strip_edges()
 	if t == "":
 		return {}
-	if t.contains(".") or t.contains(":") or t.to_lower() == "localhost":
+	var tls := false
+	var default_port := DEFAULT_PORT
+	var lower := t.to_lower()
+	if lower.begins_with("wss://"):
+		tls = true
+		default_port = 443
+		t = t.substr(6)
+	elif lower.begins_with("ws://"):
+		t = t.substr(5)
+	t = t.trim_suffix("/")
+	if tls or t.contains(".") or t.contains(":") or t.to_lower() == "localhost":
 		var host := t
-		var port := DEFAULT_PORT
+		var port := default_port
 		if t.contains(":"):
 			var bits := t.rsplit(":", true, 1)
 			host = bits[0]
 			if not bits[1].is_valid_int() or int(bits[1]) < 1 or int(bits[1]) > 65535:
 				return {}
 			port = int(bits[1])
-		return {"address": "127.0.0.1" if host.to_lower() == "localhost" else host, "port": port}
+		if host == "":
+			return {}
+		return {
+			"address": "127.0.0.1" if host.to_lower() == "localhost" else host,
+			"port": port,
+			"tls": tls or port == 443,
+		}
 	return decode_room_code(t)
 
 
@@ -398,9 +452,9 @@ func _smaller_team() -> int:
 
 ## Starts listening for WebSocket connections on `port`. The host process
 ## itself becomes peer id 1 and does NOT need a separate join() call.
-func host(port: int = DEFAULT_PORT) -> Error:
+func host(port: int = DEFAULT_PORT, tls: TLSOptions = null) -> Error:
 	var peer := WebSocketMultiplayerPeer.new()
-	var err := peer.create_server(port)
+	var err := peer.create_server(port, "*", tls)
 	if err != OK:
 		return err
 	_peer = peer
@@ -417,10 +471,16 @@ func host(port: int = DEFAULT_PORT) -> Error:
 ## Connects to a running host at ws://address:port. Success/failure arrive
 ## later via connected_to_server/connection_failed, not this call's return
 ## value — WebSocket handshakes aren't instant.
-func join(address: String, port: int = DEFAULT_PORT) -> Error:
+func join(address: String, port: int = DEFAULT_PORT, tls: bool = false) -> Error:
 	var peer := WebSocketMultiplayerPeer.new()
-	var url := "ws://%s:%d" % [address, port]
-	var err := peer.create_client(url)
+	# A browser page served over https is not allowed to open a plain ws://
+	# connection, so there the secure form is forced.
+	var use_tls := tls or _page_is_https()
+	var url := "%s://%s:%d" % ["wss" if use_tls else "ws", address, port]
+	var options: TLSOptions = null
+	if use_tls and not OS.has_feature("web"):  # browsers do their own TLS
+		options = _client_tls_options()
+	var err := peer.create_client(url, options)
 	if err != OK:
 		return err
 	_peer = peer
@@ -431,22 +491,34 @@ func join(address: String, port: int = DEFAULT_PORT) -> Error:
 	return OK
 
 
+static func _page_is_https() -> bool:
+	return OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.protocol")) == "https:"
+
+
+func _client_tls_options() -> TLSOptions:
+	if tls_trust_path != "":
+		var cert := X509Certificate.new()
+		if cert.load(tls_trust_path) == OK:
+			return TLSOptions.client_unsafe(cert)
+		push_warning("--tls-trust file could not be read: %s" % tls_trust_path)
+	return TLSOptions.client()
+
+
 func leave() -> void:
 	var current := multiplayer.multiplayer_peer
 	# Say goodbye first so the host can tell leaving from crashing. The
 	# short wait lets the message out before the socket closes; meanwhile
 	# we already count as disconnected so the UI doesn't show a live room.
-	if current and not multiplayer.is_server() and match_in_progress and is_connected_to_match():
+	if has_peer() and not multiplayer.is_server() and match_in_progress and is_connected_to_match():
 		_leaving = true
 		_bye.rpc_id(1)
 		await get_tree().create_timer(0.15).timeout
 		_leaving = false
 		if multiplayer.multiplayer_peer != current:
 			return  # a new connection was started meanwhile; leave it alone
-	if multiplayer.multiplayer_peer:
+	if has_peer():
 		multiplayer.multiplayer_peer.close()
-		multiplayer.multiplayer_peer = null
-	_peer = null
+	_drop_peer()
 	players.clear()
 	ready_peers.clear()
 	match_in_progress = false
@@ -600,7 +672,7 @@ func _reject_peer(id: int, reason: String) -> void:
 	# Give the rejection RPC a moment to actually go out before closing the
 	# socket — disconnecting in the same frame can drop it unsent.
 	await get_tree().create_timer(0.3).timeout
-	if multiplayer.has_multiplayer_peer() and id in multiplayer.get_peers():
+	if has_peer() and id in multiplayer.get_peers():
 		multiplayer.multiplayer_peer.disconnect_peer(id)
 
 
@@ -611,6 +683,7 @@ func _reject_peer(id: int, reason: String) -> void:
 func _on_peer_connected(id: int) -> void:
 	if not is_host():
 		return
+	_server_log("peer %d connected" % id)
 	if match_in_progress:
 		_reject_peer(id, "Match already in progress")
 		return
@@ -649,14 +722,12 @@ func _on_connected_to_server() -> void:
 
 
 func _on_connection_failed() -> void:
-	multiplayer.multiplayer_peer = null
-	_peer = null
+	_drop_peer()
 	connection_failed.emit()
 
 
 func _on_server_disconnected() -> void:
-	multiplayer.multiplayer_peer = null
-	_peer = null
+	_drop_peer()
 	players.clear()
 	match_in_progress = false
 	disconnected_from_server.emit()

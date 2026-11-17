@@ -144,7 +144,7 @@ func configure_replication() -> void:
 
 
 func _is_mine() -> bool:
-	return multiplayer.has_multiplayer_peer() and owner_peer_id == multiplayer.get_unique_id()
+	return Network.has_peer() and owner_peer_id == multiplayer.get_unique_id()
 
 
 func _arena() -> Node:
@@ -200,7 +200,7 @@ func _reconcile(delta: float, dir: Vector2) -> void:
 func _process(delta: float) -> void:
 	# After the host drops, the arena lingers behind the "lost connection"
 	# overlay with no peer assigned; asking multiplayer anything then errors.
-	if not multiplayer.has_multiplayer_peer():
+	if not Network.has_peer():
 		return
 	reveal_timer = maxf(0.0, reveal_timer - delta)
 	if not multiplayer.is_server() and not _is_mine():
@@ -244,7 +244,7 @@ func _draw() -> void:
 # ---------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
-	if not multiplayer.has_multiplayer_peer():
+	if not Network.has_peer():
 		return
 	_cooldown_left = maxf(0.0, _cooldown_left - delta)
 	if multiplayer.is_server():

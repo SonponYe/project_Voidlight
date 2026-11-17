@@ -63,7 +63,7 @@ func is_enemy_of(player: NetPlayer) -> bool:
 
 
 func _is_friendly() -> bool:
-	return multiplayer.has_multiplayer_peer() and owner_peer_id == multiplayer.get_unique_id()
+	return Network.has_peer() and owner_peer_id == multiplayer.get_unique_id()
 
 
 func _draw() -> void:
@@ -72,7 +72,7 @@ func _draw() -> void:
 
 
 func _process(delta: float) -> void:
-	if not multiplayer.has_multiplayer_peer():
+	if not Network.has_peer():
 		return
 	name_label.rotation = -rotation
 	if _is_friendly():
@@ -87,7 +87,7 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if not multiplayer.has_multiplayer_peer() or not multiplayer.is_server() or dead:
+	if not Network.has_peer() or not multiplayer.is_server() or dead:
 		return
 	lifespan -= delta
 	if lifespan <= 0.0:
