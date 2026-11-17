@@ -131,7 +131,8 @@ func _begin_match() -> void:
 		return
 	_match_started = true
 	Network.mark_all_heard()
-	_spawn_for_peer(1)
+	if Network.players.has(1):  # a dedicated server has no avatar of its own
+		_spawn_for_peer(1)
 	for id in Network.players:
 		if id != 1 and Network.ready_peers.has(id):
 			_spawn_for_peer(id)
@@ -201,6 +202,8 @@ func _on_player_died(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
+	if not is_inside_tree():
+		return
 	var node := players_root.get_node_or_null(str(id)) as NetPlayer
 	var left_on_purpose := Network.left_cleanly.has(id)
 	Network.left_cleanly.erase(id)
@@ -487,7 +490,7 @@ func _announce(text: String) -> void:
 @rpc("authority", "call_local", "reliable")
 func _show_results(text: String) -> void:
 	_match_over = true
-	hud.show_results(text, Network.is_host())
+	hud.show_results(text, Network.is_leader())
 
 
 # ---------------------------------------------------------------------------
@@ -530,6 +533,9 @@ func _on_lost_server() -> void:
 ## simply freed, its despawn packets reach clients after they've already
 ## torn down their own arena, and every one logs an ERR_UNAUTHORIZED.
 func _on_return_pressed() -> void:
+	if not Network.is_host():
+		Network.ask_return()  # the leader asks; the host does the cleanup
+		return
 	for child in players_root.get_children():
 		child.queue_free()
 	for child in bombs_root.get_children():

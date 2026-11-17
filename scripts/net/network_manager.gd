@@ -31,6 +31,8 @@ const MAX_PLAYERS := 5
 const MAX_NAME_LENGTH := 16
 const LOBBY_SCENE := "res://scenes/ui/net_lobby.tscn"
 const ARENA_SCENE := "res://scenes/net/net_arena.tscn"
+## What a dedicated server sits on between matches: nothing to render.
+const IDLE_SCENE := "res://scenes/net/server_idle.tscn"
 
 ## peer_id -> { "name": String, "gen": String, "team": int }. Server is
 ## the source of truth; clients receive a full copy via _sync_players
@@ -42,6 +44,10 @@ var local_gen := Gens.DEFAULT
 var match_mode := "ffa"
 var match_in_progress := false
 var last_reject_reason := ""
+## True when this process is a headless server with no player of its own
+## (--server on the command line, or a Godot dedicated-server export).
+var dedicated := false
+var _join_seq := 0
 
 ## Server-only: peers whose arena scene is loaded and ready to receive
 ## spawns. Cleared at every match start.
@@ -78,6 +84,29 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+	var args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
+	if OS.has_feature("dedicated_server") or "--server" in args:
+		dedicated = true
+		_boot_dedicated.call_deferred(args)
+
+
+func _boot_dedicated(args: PackedStringArray) -> void:
+	var port := DEFAULT_PORT
+	for a in args:
+		if a.begins_with("--port="):
+			port = int(a.trim_prefix("--port="))
+	var err := host(port)
+	if err != OK:
+		push_error("Dedicated server could not listen on port %d (error %d)" % [port, err])
+		get_tree().quit(1)
+		return
+	_server_log("dedicated server listening on port %d (max %d players)" % [port, MAX_PLAYERS])
+	get_tree().change_scene_to_file(IDLE_SCENE)
+
+
+func _server_log(msg: String) -> void:
+	if dedicated:
+		print("[server] ", msg)
 
 
 func _process(delta: float) -> void:
@@ -129,6 +158,42 @@ func _pong(sent_msec: int) -> void:
 
 func is_host() -> bool:
 	return multiplayer.has_multiplayer_peer() and multiplayer.is_server()
+
+
+## The room leader controls Start, the mode, and Return to Lobby: whoever has
+## been in the room longest. On a hosted game that's the host; on a dedicated
+## server (which has no roster entry) it's whoever joined first, and the role
+## passes on by itself when they leave. Join order is tracked explicitly —
+## Godot hands out random peer ids, so a lower id says nothing about who
+## arrived first.
+func leader_id() -> int:
+	var best := 0
+	var best_order := 1 << 30
+	for id in players:
+		var order: int = players[id].get("order", 1 << 29)
+		if order < best_order:
+			best_order = order
+			best = id
+	return best
+
+
+func is_leader() -> bool:
+	return multiplayer.has_multiplayer_peer() and multiplayer.get_unique_id() == leader_id()
+
+
+## Whether a match could start right now. The host re-checks this itself, so
+## it can't be bypassed by a client asking.
+func can_start() -> bool:
+	if match_in_progress or players.size() < 2:
+		return false
+	if is_team_mode():
+		var counts := {1: 0, 2: 0}
+		for id in players:
+			var t: int = players[id].get("team", 0)
+			if counts.has(t):
+				counts[t] += 1
+		return counts[1] > 0 and counts[2] > 0
+	return true
 
 
 func is_connected_to_match() -> bool:
@@ -275,8 +340,9 @@ func select_gen(key: String) -> void:
 		return
 	local_gen = key
 	if is_host():
-		players[1]["gen"] = key
-		_broadcast_players()
+		if players.has(1):
+			players[1]["gen"] = key
+			_broadcast_players()
 	elif is_connected_to_match():
 		_select_gen.rpc_id(1, key)
 
@@ -286,17 +352,32 @@ func select_team(team: int) -> void:
 	if not is_team_mode() or match_in_progress or team not in [1, 2]:
 		return
 	if is_host():
-		players[1]["team"] = team
-		_broadcast_players()
+		if players.has(1):
+			players[1]["team"] = team
+			_broadcast_players()
 	elif is_connected_to_match():
 		_select_team.rpc_id(1, team)
 
 
-## Host only. Switching to team mode deals everyone onto alternating
-## sides; switching back clears teams.
+## Leader only (the host re-checks). Switching to team mode deals everyone
+## onto alternating sides; switching back clears teams.
 func set_match_mode(mode: String) -> void:
-	if not is_host() or match_in_progress or mode not in ["ffa", "team"]:
+	if mode not in ["ffa", "team"] or match_in_progress:
 		return
+	if is_host():
+		_apply_mode(mode)
+	elif is_leader():
+		_set_mode.rpc_id(1, mode)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _set_mode(mode: String) -> void:
+	if is_host() and multiplayer.get_remote_sender_id() == leader_id() \
+			and not match_in_progress and mode in ["ffa", "team"]:
+		_apply_mode(mode)
+
+
+func _apply_mode(mode: String) -> void:
 	match_mode = mode
 	var ids := players.keys()
 	ids.sort()
@@ -327,7 +408,8 @@ func host(port: int = DEFAULT_PORT) -> Error:
 	match_in_progress = false
 	last_reject_reason = ""
 	match_mode = "ffa"
-	players = {1: {"name": local_name, "gen": local_gen, "team": 0}}
+	_join_seq = 0
+	players = {} if dedicated else {1: {"name": local_name, "gen": local_gen, "team": 0, "order": 0}}
 	player_list_changed.emit()
 	return OK
 
@@ -375,10 +457,24 @@ func leave() -> void:
 # Match flow (host-driven)
 # ---------------------------------------------------------------------------
 
-## Host only. Locks the room and moves every peer into the arena.
+## Leader only. Asks for the room to move into the arena; the host decides.
 func start_match() -> void:
-	if not is_host():
+	if is_host():
+		_do_start()
+	elif is_leader():
+		_request_start.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_start() -> void:
+	if is_host() and multiplayer.get_remote_sender_id() == leader_id():
+		_do_start()
+
+
+func _do_start() -> void:
+	if not can_start():
 		return
+	_server_log("match starting with %d players (%s)" % [players.size(), match_mode])
 	match_in_progress = true
 	ready_peers.clear()
 	left_cleanly.clear()
@@ -387,14 +483,33 @@ func start_match() -> void:
 	_load_scene(ARENA_SCENE)
 
 
-## Host only. Brings every peer back to the lobby, connection intact.
+## Brings every peer back to the lobby, connection intact. Only the host can
+## do it; the leader asks via ask_return() and the arena runs its cleanup first.
 func return_to_lobby() -> void:
 	if not is_host():
 		return
 	match_in_progress = false
 	ready_peers.clear()
 	_load_scene.rpc(LOBBY_SCENE)
-	_load_scene(LOBBY_SCENE)
+	if dedicated:
+		get_tree().change_scene_to_file(IDLE_SCENE)
+	else:
+		_load_scene(LOBBY_SCENE)
+	_server_log("match over, room back in the lobby")
+
+
+func ask_return() -> void:
+	if is_leader() and not is_host():
+		_request_return.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_return() -> void:
+	if not is_host() or not match_in_progress or multiplayer.get_remote_sender_id() != leader_id():
+		return
+	var arena := get_tree().current_scene
+	if arena and arena.has_method("_on_return_pressed"):
+		arena._on_return_pressed()
 
 
 ## Clients call this from the arena's _ready() once their MultiplayerSpawner
@@ -432,7 +547,9 @@ func _register(raw_name: String, gen: String) -> void:
 	var id := multiplayer.get_remote_sender_id()
 	_last_heard[id] = Time.get_ticks_msec()
 	var cleaned := raw_name.strip_edges().substr(0, MAX_NAME_LENGTH)
+	_join_seq += 1
 	players[id] = {
+		"order": _join_seq,
 		"name": cleaned if cleaned != "" else "Player %d" % id,
 		"gen": gen if Gens.is_valid(gen) else Gens.DEFAULT,
 		"team": _smaller_team() if is_team_mode() else 0,
@@ -509,6 +626,22 @@ func _on_peer_disconnected(id: int) -> void:
 		ready_peers.erase(id)
 		_last_heard.erase(id)
 		_broadcast_players()
+		_server_log("player %d left (%d in room)" % [id, players.size()])
+		# A dedicated server with nobody left resets itself for the next room.
+		if dedicated and players.is_empty():
+			_reset_empty_server.call_deferred()
+
+
+## Deferred so every other disconnect handler (the arena's, notably) finishes
+## before the scene underneath them is swapped out.
+func _reset_empty_server() -> void:
+	if not players.is_empty():
+		return
+	match_in_progress = false
+	match_mode = "ffa"
+	ready_peers.clear()
+	get_tree().change_scene_to_file(IDLE_SCENE)
+	_server_log("room empty, reset")
 
 
 func _on_connected_to_server() -> void:

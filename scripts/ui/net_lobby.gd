@@ -72,7 +72,7 @@ func _show_room() -> void:
 	_connecting = false
 	connect_panel.visible = false
 	room_panel.visible = true
-	start_button.visible = Network.is_host()
+	start_button.visible = Network.is_leader()
 	_refresh_room()
 
 
@@ -134,24 +134,26 @@ func _refresh_room() -> void:
 		label.text = "%s%s  —  %s%s" % [side, Network.player_name(id), Gens.label(Network.player_gen(id)), tag]
 		player_list.add_child(label)
 	room_title.text = "ROOM  —  %d / %d players" % [ids.size(), Network.MAX_PLAYERS]
-	if Network.is_host():
-		var enough := ids.size() >= 2
-		if Network.is_team_mode():
-			enough = team_counts[1] > 0 and team_counts[2] > 0
-		start_button.disabled = not enough
+	start_button.visible = Network.is_leader()
+	var where := ""
+	if Network.is_host() and not Network.dedicated:
 		var lan := _lan_address()
 		var code := Network.format_room_code(Network.encode_room_code(lan))
-		var where := "Friends on your Wi-Fi join with:  %s" % lan
+		where = "Friends on your Wi-Fi join with:  %s" % lan
 		if code != "":
 			where += "   or code  %s" % code
+	if Network.is_leader():
+		var enough := Network.can_start()
+		start_button.disabled = not enough
 		if enough:
 			status_label.text = "Press Start when everyone's in.   %s" % where
 		elif Network.is_team_mode():
 			status_label.text = "Both teams need at least one player.   %s" % where
 		else:
 			status_label.text = "Waiting for at least one more player...   %s" % where
+		status_label.text = status_label.text.strip_edges()
 	else:
-		status_label.text = "Waiting for the host to start the match..."
+		status_label.text = "Waiting for %s to start the match..." % Network.player_name(Network.leader_id())
 
 
 ## The host's private IPv4 on the local network — what a friend on the
@@ -166,9 +168,9 @@ func _lan_address() -> String:
 
 
 func _refresh_mode_buttons() -> void:
-	var host := Network.is_host()
-	ffa_button.disabled = not host
-	team_mode_button.disabled = not host
+	var leader := Network.is_leader()
+	ffa_button.disabled = not leader
+	team_mode_button.disabled = not leader
 	var team_mode := Network.is_team_mode()
 	ffa_button.modulate = UNSELECTED_TINT if team_mode else SELECTED_TINT
 	team_mode_button.modulate = SELECTED_TINT if team_mode else UNSELECTED_TINT
