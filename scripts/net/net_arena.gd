@@ -9,6 +9,9 @@ extends Node2D
 
 const NET_PLAYER_SCENE := "res://scenes/net/net_player.tscn"
 const NET_BOMB_SCENE := "res://scenes/net/net_bomb.tscn"
+const NET_DECOY_SCENE := "res://scenes/net/net_decoy.tscn"
+## Must match maze.gd's CELL — the Maze layout doubles as the decoys' grid.
+const CELL_SIZE := 64.0
 
 ## How long the host waits for every client to load the arena before
 ## starting without the stragglers. A spawn sent to a peer whose arena
@@ -34,6 +37,8 @@ const BLACKOUT_COLOR := Color(0.06, 0.06, 0.08)
 @onready var bombs_root: Node2D = $Bombs
 @onready var spawner: MultiplayerSpawner = $MultiplayerSpawner
 @onready var bomb_spawner: MultiplayerSpawner = $BombSpawner
+@onready var decoys_root: Node2D = $Decoys
+@onready var decoy_spawner: MultiplayerSpawner = $DecoySpawner
 @onready var hud: CanvasLayer = $NetHUD
 @onready var camera: Camera2D = $Camera
 @onready var world_modulate: CanvasModulate = $CanvasModulate
@@ -53,6 +58,8 @@ var _match_over := false
 var _is_contest := false
 var _participants: Array[int] = []
 var _bomb_seq := 0
+var _decoy_seq := 0
+var _astar := AStarGrid2D.new()
 
 ## Peer id of the active Blackout caster, 0 when the lights are on.
 ## Broadcast by the server via _set_blackout.
@@ -64,6 +71,9 @@ func _ready() -> void:
 	spawner.spawn_function = _spawn_player
 	bomb_spawner.spawn_path = bombs_root.get_path()
 	bomb_spawner.spawn_function = _spawn_bomb
+	decoy_spawner.spawn_path = decoys_root.get_path()
+	decoy_spawner.spawn_function = _spawn_decoy
+	_build_nav()
 	hud.return_pressed.connect(_on_return_pressed)
 	hud.leave_pressed.connect(_on_leave_pressed)
 	Network.disconnected_from_server.connect(_on_lost_server)
@@ -304,6 +314,65 @@ func _spawn_bomb(data: Dictionary) -> Node:
 	return bomb
 
 
+func player_node(id: int) -> NetPlayer:
+	return players_root.get_node_or_null(str(id)) as NetPlayer
+
+
+# ---------------------------------------------------------------------------
+# Decoy (host)
+# ---------------------------------------------------------------------------
+
+func _build_nav() -> void:
+	var layout: PackedStringArray = $Maze.layout
+	var width := 0
+	for row in layout:
+		width = maxi(width, row.length())
+	_astar.region = Rect2i(0, 0, width, layout.size())
+	_astar.cell_size = Vector2(CELL_SIZE, CELL_SIZE)
+	_astar.offset = Vector2(CELL_SIZE, CELL_SIZE) * 0.5
+	_astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	_astar.update()
+	for y in layout.size():
+		for x in layout[y].length():
+			if layout[y][x] == "#":
+				_astar.set_point_solid(Vector2i(x, y), true)
+
+
+## Waypoints (cell centers) from one world position to another, around walls.
+## Empty if either end is outside the grid or sitting inside a wall cell.
+func find_path(from: Vector2, to: Vector2) -> PackedVector2Array:
+	var a := Vector2i((from / CELL_SIZE).floor())
+	var b := Vector2i((to / CELL_SIZE).floor())
+	if not _astar.is_in_boundsv(a) or not _astar.is_in_boundsv(b) \
+			or _astar.is_point_solid(a) or _astar.is_point_solid(b):
+		return PackedVector2Array()
+	return _astar.get_point_path(a, b)
+
+
+func spawn_decoy(caster: NetPlayer, prey: NetPlayer, lifespan: float) -> void:
+	_decoy_seq += 1
+	decoy_spawner.spawn({
+		"id": _decoy_seq, "owner": caster.owner_peer_id, "team": caster.team,
+		"target": prey.owner_peer_id, "pos": caster.global_position,
+		"name": caster.display_name, "color": caster.visual.color, "life": lifespan,
+	})
+
+
+func _spawn_decoy(data: Dictionary) -> Node:
+	var scene: PackedScene = load(NET_DECOY_SCENE)
+	var decoy := scene.instantiate() as NetDecoy
+	decoy.name = "decoy_%d" % data["id"]
+	decoy.owner_peer_id = data["owner"]
+	decoy.team = data["team"]
+	decoy.target_id = data["target"]
+	decoy.display_name = data["name"]
+	decoy.color = data["color"]
+	decoy.lifespan = data["life"]
+	decoy.position = data["pos"]
+	decoy.configure_replication()
+	return decoy
+
+
 func detonate_bombs(owner_id: int) -> void:
 	for b in bombs_root.get_children():
 		if b is NetBomb and b.owner_peer_id == owner_id and b.manual:
@@ -374,9 +443,16 @@ func _update_vision(me: NetPlayer) -> void:
 	for b in bombs_root.get_children():
 		if b is NetBomb:
 			b.visible = spectating or b.owner_peer_id == me.owner_peer_id
+	# A decoy is seen exactly like the player it imitates — except by its own
+	# side, who always know which one is the fake.
+	for d in decoys_root.get_children():
+		if d is NetDecoy:
+			var friendly: bool = me != null and (d.owner_peer_id == me.owner_peer_id \
+					or (me.team != 0 and d.team == me.team))
+			d.visible = spectating or friendly or _can_see(me, d)
 
 
-func _can_see(me: NetPlayer, other: NetPlayer) -> bool:
+func _can_see(me: NetPlayer, other: Node2D) -> bool:
 	if other.reveal_timer > 0.0:
 		return true
 	var offset := other.global_position - me.global_position
@@ -457,6 +533,8 @@ func _on_return_pressed() -> void:
 	for child in players_root.get_children():
 		child.queue_free()
 	for child in bombs_root.get_children():
+		child.queue_free()
+	for child in decoys_root.get_children():
 		child.queue_free()
 	await get_tree().process_frame
 	await get_tree().process_frame

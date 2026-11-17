@@ -27,8 +27,8 @@ const DEFS := {
 		"blurb": "Up to 5 bombs. Tap: proximity. Hold: manual. Only you see them.",
 	},
 	"decoy": {
-		"label": "Decoy", "duration": 0.0, "cooldown": 18.0, "available": false,
-		"blurb": "A clone that hunts one enemy. (Online version coming.)",
+		"label": "Decoy", "duration": 20.0, "cooldown": 25.0, "available": true,
+		"blurb": "A clone of you hunts the nearest enemy for 20s. They can't tell it from you.",
 	},
 }
 const DEFAULT := "shield"

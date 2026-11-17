@@ -383,6 +383,8 @@ func _server_shoot(aim: float) -> void:
 		hit_point = result.position
 		if result.collider is NetPlayer and is_enemy(result.collider):
 			(result.collider as NetPlayer).apply_damage(1)
+		elif result.collider is NetDecoy and (result.collider as NetDecoy).is_enemy_of(self):
+			(result.collider as NetDecoy).apply_damage(1)
 	_shot_fx.rpc(from, hit_point)
 
 
@@ -411,6 +413,12 @@ func _server_gen(action: int) -> void:
 			if gen_state == GenState.READY:
 				_activate_gen(def)
 				_arena().begin_blackout(owner_peer_id)
+		"decoy":
+			if gen_state == GenState.READY:
+				var prey := _nearest_enemy()
+				if prey:
+					_activate_gen(def)
+					_arena().spawn_decoy(self, prey, def["duration"])
 		"bomb_voyage":
 			if action == GenAction.DETONATE:
 				_arena().detonate_bombs(owner_peer_id)

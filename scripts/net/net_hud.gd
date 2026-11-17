@@ -94,6 +94,9 @@ func set_gen(me: NetPlayer) -> void:
 		"blackout":
 			if me.gen_state == NetPlayer.GenState.ACTIVE:
 				hint = "Lights out. Only you can see."
+		"decoy":
+			if me.gen_state == NetPlayer.GenState.ACTIVE:
+				hint = "Your decoy is hunting the nearest enemy."
 		"bomb_voyage":
 			hint = "Bombs out  %d / %d  —  tap Q: proximity, hold Q: manual, E: detonate" % [
 				me.bombs_placed, Gens.def("bomb_voyage")["max_bombs"]]

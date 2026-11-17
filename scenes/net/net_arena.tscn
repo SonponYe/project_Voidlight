@@ -22,6 +22,10 @@ layout = PackedStringArray("########################", "#......................#
 
 [node name="BombSpawner" type="MultiplayerSpawner" parent="."]
 
+[node name="Decoys" type="Node2D" parent="."]
+
+[node name="DecoySpawner" type="MultiplayerSpawner" parent="."]
+
 [node name="Camera" type="Camera2D" parent="."]
 position = Vector2(768, 512)
 limit_left = 0
