@@ -141,6 +141,108 @@ func set_local_name(raw: String) -> void:
 	local_name = cleaned if cleaned != "" else "Player"
 
 
+# ---------------------------------------------------------------------------
+# Room codes
+# ---------------------------------------------------------------------------
+# A room code is the host's address in a short, typeable form (8 characters
+# for an address on the default port, 11 if the port is custom). It is an
+# ENCODING, not a lookup — there's no matchmaking server behind it yet, so
+# it's only as reachable as the address inside it (LAN today).
+
+const CODE_ALPHABET := "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"  # no 0/O/1/I
+
+
+## Codes carry a check value so a mistyped code is rejected instead of
+## quietly pointing at some other machine: 8 characters (address + 8-bit
+## check) on the default port, 11 (address + port + 7-bit check) otherwise.
+static func _code_check(data: int, byte_count: int) -> int:
+	var crc := 0
+	for i in byte_count:
+		crc = (crc * 31 + ((data >> (8 * i)) & 0xFF) + 1) & 0xFF
+	return crc
+
+
+static func encode_room_code(ip: String, port: int = DEFAULT_PORT) -> String:
+	var parts := ip.split(".")
+	if parts.size() != 4:
+		return ""
+	var value := 0
+	for p in parts:
+		if not p.is_valid_int() or int(p) < 0 or int(p) > 255:
+			return ""
+		value = (value << 8) | int(p)
+	var custom_port := port != DEFAULT_PORT
+	if custom_port:
+		if port < 1 or port > 65535:
+			return ""
+		value = (value << 16) | port
+	var byte_count := 6 if custom_port else 4
+	var check_bits := 7 if custom_port else 8
+	var length := 11 if custom_port else 8
+	value = (value << check_bits) | (_code_check(value, byte_count) & ((1 << check_bits) - 1))
+	var out := ""
+	for i in length:
+		out = CODE_ALPHABET[value & 31] + out
+		value >>= 5
+	return out
+
+
+static func format_room_code(code: String) -> String:
+	if code.length() <= 4:
+		return code
+	if code.length() <= 8:
+		return "%s-%s" % [code.substr(0, 4), code.substr(4)]
+	return "%s-%s-%s" % [code.substr(0, 4), code.substr(4, 4), code.substr(8)]
+
+
+## {"address": String, "port": int}, or {} if it isn't a valid code (wrong
+## length, a character outside the alphabet, or a failed check value).
+static func decode_room_code(text: String) -> Dictionary:
+	var clean := text.to_upper().replace("-", "").replace(" ", "")
+	if clean.length() != 8 and clean.length() != 11:
+		return {}
+	var value := 0
+	for c in clean:
+		var idx := CODE_ALPHABET.find(c)
+		if idx < 0:
+			return {}
+		value = (value << 5) | idx
+	var custom_port := clean.length() == 11
+	var check_bits := 7 if custom_port else 8
+	var check := value & ((1 << check_bits) - 1)
+	var data := value >> check_bits
+	if (_code_check(data, 6 if custom_port else 4) & ((1 << check_bits) - 1)) != check:
+		return {}
+	var port := DEFAULT_PORT
+	if custom_port:
+		port = data & 0xFFFF
+		data >>= 16
+		if port < 1:
+			return {}
+	var address := "%d.%d.%d.%d" % [(data >> 24) & 255, (data >> 16) & 255, (data >> 8) & 255, data & 255]
+	return {"address": address, "port": port}
+
+
+## What a player typed into the join box → {"address", "port"} or {}.
+## Accepts "192.168.1.5", "192.168.1.5:9051", a hostname with a dot, or a
+## room code.
+static func parse_join_target(text: String) -> Dictionary:
+	var t := text.strip_edges()
+	if t == "":
+		return {}
+	if t.contains(".") or t.contains(":") or t.to_lower() == "localhost":
+		var host := t
+		var port := DEFAULT_PORT
+		if t.contains(":"):
+			var bits := t.rsplit(":", true, 1)
+			host = bits[0]
+			if not bits[1].is_valid_int() or int(bits[1]) < 1 or int(bits[1]) > 65535:
+				return {}
+			port = int(bits[1])
+		return {"address": "127.0.0.1" if host.to_lower() == "localhost" else host, "port": port}
+	return decode_room_code(t)
+
+
 func player_name(id: int) -> String:
 	if players.has(id):
 		return players[id]["name"]
