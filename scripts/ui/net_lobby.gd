@@ -200,9 +200,9 @@ func _on_join_pressed() -> void:
 	Network.set_local_name(name_edit.text)
 	var target := Network.parse_join_target(address_edit.text)
 	if target.is_empty():
-		_show_connect("Enter the host's IP address or room code (like K7M2-QP4).")
+		_show_connect("Enter the host's IP address, room code (like K7M2-QP4X) or wss:// address.")
 		return
-	var err := Network.join(target["address"], target["port"])
+	var err := Network.join(target["address"], target["port"], target.get("tls", false))
 	if err != OK:
 		_show_connect("Couldn't start connecting (error %d)." % err)
 		return
