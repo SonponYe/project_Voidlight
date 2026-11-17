@@ -17,24 +17,21 @@ extends Control
 @onready var player_list: VBoxContainer = $VBox/RoomPanel/PlayerList
 @onready var start_button: Button = $VBox/RoomPanel/RoomButtons/StartButton
 @onready var leave_button: Button = $VBox/RoomPanel/RoomButtons/LeaveButton
-@onready var gen_row: HBoxContainer = $VBox/RoomPanel/GenRow
+@onready var gen_radial: RadialPicker = $VBox/RoomPanel/GenRadial
 @onready var gen_blurb: Label = $VBox/RoomPanel/GenBlurb
 @onready var ffa_button: Button = $VBox/RoomPanel/ModeRow/FFAButton
 @onready var team_mode_button: Button = $VBox/RoomPanel/ModeRow/TeamButton
-@onready var team_row: HBoxContainer = $VBox/RoomPanel/TeamRow
-@onready var team_a_button: Button = $VBox/RoomPanel/TeamRow/TeamAButton
-@onready var team_b_button: Button = $VBox/RoomPanel/TeamRow/TeamBButton
+@onready var team_radial: RadialPicker = $VBox/RoomPanel/TeamRadial
 
 const SELECTED_TINT := Color(1.3, 1.2, 0.7)
 const UNSELECTED_TINT := Color(1, 1, 1)
 
 var _connecting := false
-var _gen_buttons: Dictionary = {}
 
 
 func _ready() -> void:
 	name_edit.text = Network.local_name
-	_build_gen_buttons()
+	_build_pickers()
 	Network.player_list_changed.connect(_refresh_room)
 	Network.connection_failed.connect(_on_connection_failed)
 	Network.disconnected_from_server.connect(_on_disconnected)
@@ -80,25 +77,34 @@ func _show_room() -> void:
 
 
 ## Built from Gens.DEFS so adding a Gen is a table edit, not a scene edit.
-func _build_gen_buttons() -> void:
+func _build_pickers() -> void:
+	var gens := []
 	for key in Gens.DEFS:
-		var def: Dictionary = Gens.DEFS[key]
-		var button := Button.new()
-		button.text = def["label"]
-		button.disabled = not def["available"]
-		button.pressed.connect(_on_gen_pressed.bind(key))
-		gen_row.add_child(button)
-		_gen_buttons[key] = button
+		gens.append({"key": key, "label": Gens.DEFS[key]["label"], "disabled": not Gens.DEFS[key]["available"]})
+	gen_radial.hub_prefix = "Gen:  "
+	gen_radial.set_items(gens)
+	gen_radial.picked.connect(_on_gen_picked)
+
+	team_radial.hub_prefix = "Team:  "
+	team_radial.radius = 62.0
+	team_radial.set_items([
+		{"key": "1", "label": Network.team_name(1)},
+		{"key": "2", "label": Network.team_name(2)},
+	])
+	team_radial.picked.connect(_on_team_picked)
 
 
-func _on_gen_pressed(key: String) -> void:
+func _on_gen_picked(key: String) -> void:
 	Network.select_gen(key)
 	_refresh_gen_buttons()
 
 
+func _on_team_picked(key: String) -> void:
+	Network.select_team(int(key))
+
+
 func _refresh_gen_buttons() -> void:
-	for key in _gen_buttons:
-		_gen_buttons[key].modulate = SELECTED_TINT if key == Network.local_gen else UNSELECTED_TINT
+	gen_radial.set_selected(Network.local_gen)
 	gen_blurb.text = Gens.def(Network.local_gen)["blurb"]
 
 
@@ -133,7 +139,11 @@ func _refresh_room() -> void:
 		if Network.is_team_mode():
 			enough = team_counts[1] > 0 and team_counts[2] > 0
 		start_button.disabled = not enough
-		var where := "Friends on your Wi-Fi join with:  %s" % _lan_address()
+		var lan := _lan_address()
+		var code := Network.format_room_code(Network.encode_room_code(lan))
+		var where := "Friends on your Wi-Fi join with:  %s" % lan
+		if code != "":
+			where += "   or code  %s" % code
 		if enough:
 			status_label.text = "Press Start when everyone's in.   %s" % where
 		elif Network.is_team_mode():
@@ -162,11 +172,9 @@ func _refresh_mode_buttons() -> void:
 	var team_mode := Network.is_team_mode()
 	ffa_button.modulate = UNSELECTED_TINT if team_mode else SELECTED_TINT
 	team_mode_button.modulate = SELECTED_TINT if team_mode else UNSELECTED_TINT
-	team_row.visible = team_mode
+	team_radial.visible = team_mode
 	if team_mode:
-		var mine := Network.player_team(multiplayer.get_unique_id())
-		team_a_button.modulate = SELECTED_TINT if mine == 1 else UNSELECTED_TINT
-		team_b_button.modulate = SELECTED_TINT if mine == 2 else UNSELECTED_TINT
+		team_radial.set_selected(str(Network.player_team(multiplayer.get_unique_id())))
 
 
 func _on_ffa_pressed() -> void:
@@ -175,14 +183,6 @@ func _on_ffa_pressed() -> void:
 
 func _on_team_mode_pressed() -> void:
 	Network.set_match_mode("team")
-
-
-func _on_team_a_pressed() -> void:
-	Network.select_team(1)
-
-
-func _on_team_b_pressed() -> void:
-	Network.select_team(2)
 
 
 func _on_host_pressed() -> void:
@@ -196,18 +196,18 @@ func _on_host_pressed() -> void:
 
 func _on_join_pressed() -> void:
 	Network.set_local_name(name_edit.text)
-	var address := address_edit.text.strip_edges()
-	if address == "":
-		_show_connect("Enter the host's address first.")
+	var target := Network.parse_join_target(address_edit.text)
+	if target.is_empty():
+		_show_connect("Enter the host's IP address or room code (like K7M2-QP4).")
 		return
-	var err := Network.join(address)
+	var err := Network.join(target["address"], target["port"])
 	if err != OK:
 		_show_connect("Couldn't start connecting (error %d)." % err)
 		return
 	_connecting = true
 	host_button.disabled = true
 	join_button.disabled = true
-	status_label.text = "Connecting to %s..." % address
+	status_label.text = "Connecting to %s..." % target["address"]
 
 
 func _on_connected() -> void:
