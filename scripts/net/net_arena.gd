@@ -41,17 +41,13 @@ const BLACKOUT_COLOR := Color(0.06, 0.06, 0.08)
 @onready var decoy_spawner: MultiplayerSpawner = $DecoySpawner
 @onready var hud: CanvasLayer = $NetHUD
 @onready var camera: Camera2D = $Camera
+@onready var map: NetMap = $Map
 @onready var world_modulate: CanvasModulate = $CanvasModulate
 
-## Floor-cell centers of the Maze layout: the four corners, then the middle.
-var _spawn_points := [
-	Vector2(96, 96), Vector2(1440, 96), Vector2(96, 928), Vector2(1440, 928), Vector2(800, 352),
-]
-## Team mode: A spawns down the left edge, B down the right.
-var _team_spawn_points := {
-	1: [Vector2(96, 96), Vector2(96, 928), Vector2(96, 480)],
-	2: [Vector2(1440, 96), Vector2(1440, 928), Vector2(1440, 480)],
-}
+## World positions taken from the map's markers: S = free-for-all spawns,
+## 1 / 2 = team A / team B spawn zones.
+var _spawn_points: Array = []
+var _team_spawn_points: Dictionary = {}
 var _match_started := false
 var _match_over := false
 ## A match that started with a single player is a sandbox, never "won".
@@ -67,6 +63,10 @@ var blackout_by := 0
 
 
 func _ready() -> void:
+	_spawn_points = map.spawn_cells("S")
+	_team_spawn_points = {1: map.spawn_cells("1"), 2: map.spawn_cells("2")}
+	camera.limit_right = int(map.bounds.size.x)
+	camera.limit_bottom = int(map.bounds.size.y)
 	spawner.spawn_path = players_root.get_path()
 	spawner.spawn_function = _spawn_player
 	bomb_spawner.spawn_path = bombs_root.get_path()

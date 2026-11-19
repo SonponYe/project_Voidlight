@@ -42,7 +42,7 @@ const HAUNT_COLOR := Color(0.8, 0.4, 1.0)
 const BOMB_HOLD_SECONDS := 0.4
 const DISGUISE_SIZE := 44.0
 ## Drawn bigger than the collision circle so players read clearly from above.
-const BODY_SCALE := 1.5
+const BODY_SCALE := 1.8
 
 ## Movement smoothing. The server's position is replicated as net_pos (NOT
 ## as the node's own position, which would overwrite the owner's local
