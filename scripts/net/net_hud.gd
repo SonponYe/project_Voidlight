@@ -14,6 +14,7 @@ const ANNOUNCE_SECONDS := 3.0
 @onready var gen_label: Label = $GenLabel
 @onready var hint_label: Label = $HintLabel
 @onready var mic_label: Label = $MicLabel
+@onready var minimap: NetMinimap = $Minimap
 @onready var status_label: Label = $StatusLabel
 @onready var announce_label: Label = $AnnounceLabel
 @onready var night_vision: ColorRect = $NightVision
@@ -54,6 +55,10 @@ func set_alive(alive: int, total: int) -> void:
 
 func set_alive_text(text: String) -> void:
 	alive_label.text = text
+
+
+func update_minimap(map: NetMap, me: NetPlayer, players: Array, bombs: Array) -> void:
+	minimap.update_view(map, me, players, bombs)
 
 
 func set_mic(text: String) -> void:

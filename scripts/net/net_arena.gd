@@ -525,6 +525,7 @@ func _update_hud(me: NetPlayer) -> void:
 		hud.set_alive(alive, total)
 	hud.set_gen(me)
 	hud.set_mic(Voice.status_text())
+	hud.update_minimap(map, me, players_root.get_children(), bombs_root.get_children())
 	if me:
 		hud.set_hp(me.hp, me.max_hp)
 		if me.dead and not _match_over:
