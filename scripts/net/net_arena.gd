@@ -10,7 +10,7 @@ extends Node2D
 const NET_PLAYER_SCENE := "res://scenes/net/net_player.tscn"
 const NET_BOMB_SCENE := "res://scenes/net/net_bomb.tscn"
 const NET_DECOY_SCENE := "res://scenes/net/net_decoy.tscn"
-## Must match maze.gd's CELL — the Maze layout doubles as the decoys' grid.
+## Must match NetMap.CELL — the map layout doubles as the decoys' grid.
 const CELL_SIZE := 64.0
 
 ## How long the host waits for every client to load the arena before
@@ -45,7 +45,7 @@ const BLACKOUT_COLOR := Color(0.06, 0.06, 0.08)
 
 ## Floor-cell centers of the Maze layout: the four corners, then the middle.
 var _spawn_points := [
-	Vector2(96, 96), Vector2(1440, 96), Vector2(96, 928), Vector2(1440, 928), Vector2(800, 480),
+	Vector2(96, 96), Vector2(1440, 96), Vector2(96, 928), Vector2(1440, 928), Vector2(800, 352),
 ]
 ## Team mode: A spawns down the left edge, B down the right.
 var _team_spawn_points := {
@@ -331,7 +331,7 @@ func player_node(id: int) -> NetPlayer:
 # ---------------------------------------------------------------------------
 
 func _build_nav() -> void:
-	var layout: PackedStringArray = $Maze.layout
+	var layout: PackedStringArray = $Map.layout
 	var width := 0
 	for row in layout:
 		width = maxi(width, row.length())
@@ -342,7 +342,7 @@ func _build_nav() -> void:
 	_astar.update()
 	for y in layout.size():
 		for x in layout[y].length():
-			if layout[y][x] == "#":
+			if layout[y][x] in NetMap.SOLID:
 				_astar.set_point_solid(Vector2i(x, y), true)
 
 

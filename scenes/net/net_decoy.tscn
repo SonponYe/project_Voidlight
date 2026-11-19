@@ -17,12 +17,20 @@ shape = SubResource("CircleShape2D_body")
 color = Color(0.3, 0.8, 0.5, 1)
 polygon = PackedVector2Array(12, 0, -8, 8, -4, 0, -8, -8)
 
+[node name="Outline" type="Line2D" parent="."]
+points = PackedVector2Array(12, 0, -8, 8, -4, 0, -8, -8)
+closed = true
+width = 1.5
+default_color = Color(0.05, 0.05, 0.08, 0.95)
+
 [node name="NameLabel" type="Label" parent="."]
 offset_left = -50.0
-offset_top = -34.0
+offset_top = -46.0
 offset_right = 50.0
-offset_bottom = -18.0
-theme_override_font_sizes/font_size = 12
+offset_bottom = -28.0
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.9)
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 13
 horizontal_alignment = 1
 text = "Player"
 

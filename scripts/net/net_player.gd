@@ -35,12 +35,14 @@ const VIEW_RANGE := 420.0
 const VIEW_HALF_ANGLE := deg_to_rad(40.0)
 ## Firing gives your position away to everyone for this long.
 const REVEAL_ON_SHOT := 0.5
-const VISION_GUIDE_COLOR := Color(1, 1, 1, 0.08)
+const VISION_GUIDE_COLOR := Color(0, 0, 0, 0.16)
 const SHIELD_COLOR := Color(0.4, 0.9, 1.0)
 const HAUNT_COLOR := Color(0.8, 0.4, 1.0)
 ## Holding the Gen key this long drops a manual bomb instead of a proximity one.
 const BOMB_HOLD_SECONDS := 0.4
 const DISGUISE_SIZE := 44.0
+## Drawn bigger than the collision circle so players read clearly from above.
+const BODY_SCALE := 1.5
 
 ## Movement smoothing. The server's position is replicated as net_pos (NOT
 ## as the node's own position, which would overwrite the owner's local
@@ -100,6 +102,7 @@ var _joystick: Control = null
 var _aim_pad: Control = null
 
 @onready var visual: Polygon2D = $Visual
+@onready var outline: Line2D = $Outline
 @onready var disguise: Sprite2D = $Disguise
 @onready var collision: CollisionShape2D = $CollisionShape2D
 @onready var name_label: Label = $NameLabel
@@ -113,6 +116,8 @@ func _ready() -> void:
 	add_to_group("net_player")
 	visual.color = TEAM_COLORS[team] if TEAM_COLORS.has(team) else COLORS[absi(owner_peer_id) % COLORS.size()]
 	disguise.scale = Vector2.ONE * (DISGUISE_SIZE / disguise.texture.get_width())
+	visual.scale = Vector2.ONE * BODY_SCALE
+	outline.scale = Vector2.ONE * BODY_SCALE
 	_refresh_name()
 	Network.player_list_changed.connect(_refresh_name)
 	if _is_mine():
@@ -213,6 +218,8 @@ func _process(delta: float) -> void:
 	name_label.modulate.a = alpha
 	_refresh_name()
 	visual.visible = not camouflaged
+	outline.visible = not camouflaged
+	outline.modulate.a = alpha
 	disguise.visible = camouflaged
 	name_label.visible = not camouflaged
 	if dead and not collision.disabled:
@@ -226,7 +233,7 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, 20.0, 0.0, TAU, 32, Color(SHIELD_COLOR, 0.35 + 0.5 * strength), 2.5)
 	if haunted:
 		draw_arc(Vector2.ZERO, 26.0, 0.0, TAU, 24, HAUNT_COLOR, 2.0)
-		draw_circle(Vector2(0, -44).rotated(-rotation), 5.0, HAUNT_COLOR)
+		draw_circle(Vector2(0, -56).rotated(-rotation), 5.0, HAUNT_COLOR)
 	if Voice.is_speaking(owner_peer_id):
 		var at := Vector2(0, -56).rotated(-rotation)
 		draw_circle(at, 4.0, Color(0.4, 1.0, 0.5))
@@ -508,8 +515,8 @@ func bomb_exploded() -> void:
 func _shot_fx(from: Vector2, to: Vector2) -> void:
 	reveal_timer = REVEAL_ON_SHOT
 	var tracer := Line2D.new()
-	tracer.width = 2.0
-	tracer.default_color = Color(1.0, 0.95, 0.6)
+	tracer.width = 3.0
+	tracer.default_color = Color(0.95, 0.45, 0.08)
 	tracer.points = PackedVector2Array([from, to])
 	get_parent().add_child(tracer)
 	var tween := tracer.create_tween()

@@ -27,6 +27,9 @@ var _announce_timer := 0.0
 
 
 func _ready() -> void:
+	for label in [hp_label, alive_label, gen_label, hint_label, mic_label, status_label, announce_label]:
+		label.add_theme_constant_override("outline_size", 6)
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.92))
 	results.visible = false
 	night_vision.visible = false
 	announce_label.text = ""

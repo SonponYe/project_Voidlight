@@ -34,6 +34,7 @@ var _repath := 0.0
 var _hit_cooldown := 0.0
 
 @onready var visual: Polygon2D = $Visual
+@onready var outline: Line2D = $Outline
 @onready var name_label: Label = $NameLabel
 
 
@@ -41,6 +42,8 @@ func _ready() -> void:
 	net_pos = position
 	net_rot = rotation
 	visual.color = color
+	visual.scale = Vector2.ONE * NetPlayer.BODY_SCALE
+	outline.scale = Vector2.ONE * NetPlayer.BODY_SCALE
 	name_label.text = display_name
 	add_to_group("net_decoy")
 
