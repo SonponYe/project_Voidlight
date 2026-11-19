@@ -22,7 +22,7 @@ const BOUNDARY_MARGIN := 64.0
 const WALL_SCENE: PackedScene = preload("res://scenes/world/wall.tscn")
 const FLOOR_TEXTURE: Texture2D = preload("res://assets/sprites/dungeon/tile.png")
 
-@export var layout: PackedStringArray = []
+@export var layout: PackedStringArray
 
 var entrance_pos := Vector2.ZERO
 var exit_pos := Vector2.ZERO
