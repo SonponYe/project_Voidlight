@@ -165,5 +165,5 @@ func _draw() -> void:
 	if backdrop <= 0.001:
 		return
 	var reach := radius + maxf(item_size.x, item_size.y) * 0.5 + 10.0
-	draw_circle(_center(), reach, Color(BACKDROP_COLOR, 0.92 * backdrop))
+	draw_circle(_center(), reach, Color(BACKDROP_COLOR, 0.985 * backdrop))
 	draw_arc(_center(), reach, 0.0, TAU, 48, Color(1, 1, 1, 0.12 * backdrop), 1.5)

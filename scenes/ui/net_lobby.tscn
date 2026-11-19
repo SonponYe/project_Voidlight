@@ -1,7 +1,51 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/net_lobby.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/ui/radial_picker.gd" id="2"]
+
+[sub_resource type="StyleBoxFlat" id="Card"]
+bg_color = Color(0.09, 0.09, 0.12, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.22, 0.22, 0.3, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 18.0
+content_margin_top = 14.0
+content_margin_right = 18.0
+content_margin_bottom = 14.0
+
+[sub_resource type="StyleBoxFlat" id="PrimaryNormal"]
+bg_color = Color(0.2, 0.5, 0.38, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="PrimaryHover"]
+bg_color = Color(0.26, 0.6, 0.46, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="PrimaryPressed"]
+bg_color = Color(0.16, 0.42, 0.32, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="PrimaryDisabled"]
+bg_color = Color(0.14, 0.17, 0.16, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
 
 [node name="NetLobby" type="Control"]
 anchor_right = 1.0
@@ -11,131 +55,244 @@ script = ExtResource("1")
 [node name="Bg" type="ColorRect" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.03, 0.03, 0.04, 1)
+color = Color(0.05, 0.05, 0.07, 1)
 mouse_filter = 2
 
-[node name="VBox" type="VBoxContainer" parent="."]
+[node name="Main" type="VBoxContainer" parent="."]
 anchor_left = 0.5
-anchor_top = 0.08
+anchor_top = 0.04
 anchor_right = 0.5
-anchor_bottom = 0.92
-offset_left = -330.0
-offset_right = 330.0
+anchor_bottom = 0.96
+offset_left = -460.0
+offset_right = 460.0
 theme_override_constants/separation = 14
 
-[node name="TitleLabel" type="Label" parent="VBox"]
+[node name="TitleLabel" type="Label" parent="Main"]
+theme_override_font_sizes/font_size = 30
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 28
 text = "ONLINE"
 
-[node name="StatusLabel" type="Label" parent="VBox"]
+[node name="StatusLabel" type="Label" parent="Main"]
+custom_minimum_size = Vector2(0, 24)
+theme_override_colors/font_color = Color(1, 0.82, 0.5, 1)
 horizontal_alignment = 1
 autowrap_mode = 2
-custom_minimum_size = Vector2(0, 44)
 
-[node name="ConnectPanel" type="VBoxContainer" parent="VBox"]
-theme_override_constants/separation = 10
+[node name="ConnectPanel" type="VBoxContainer" parent="Main"]
+size_flags_vertical = 3
+theme_override_constants/separation = 22
 
-[node name="NameRow" type="HBoxContainer" parent="VBox/ConnectPanel"]
-theme_override_constants/separation = 10
+[node name="NameRow" type="HBoxContainer" parent="Main/ConnectPanel"]
+alignment = 1
+theme_override_constants/separation = 14
 
-[node name="NameLabel" type="Label" parent="VBox/ConnectPanel/NameRow"]
-custom_minimum_size = Vector2(90, 0)
-text = "Name"
+[node name="NameLabel" type="Label" parent="Main/ConnectPanel/NameRow"]
+theme_override_font_sizes/font_size = 18
+text = "Your name"
 
-[node name="NameEdit" type="LineEdit" parent="VBox/ConnectPanel/NameRow"]
-size_flags_horizontal = 3
+[node name="NameEdit" type="LineEdit" parent="Main/ConnectPanel/NameRow"]
+custom_minimum_size = Vector2(320, 40)
+theme_override_font_sizes/font_size = 18
 max_length = 16
 placeholder_text = "Player"
 
-[node name="AddressRow" type="HBoxContainer" parent="VBox/ConnectPanel"]
-theme_override_constants/separation = 10
+[node name="Choices" type="HBoxContainer" parent="Main/ConnectPanel"]
+alignment = 1
+theme_override_constants/separation = 24
 
-[node name="AddressLabel" type="Label" parent="VBox/ConnectPanel/AddressRow"]
-custom_minimum_size = Vector2(90, 0)
-text = "Host IP / code"
+[node name="HostButton" type="Button" parent="Main/ConnectPanel/Choices"]
+custom_minimum_size = Vector2(330, 130)
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("PrimaryNormal")
+theme_override_styles/hover = SubResource("PrimaryHover")
+theme_override_styles/pressed = SubResource("PrimaryPressed")
+theme_override_styles/disabled = SubResource("PrimaryDisabled")
+text = "Host a game
+Others join you"
 
-[node name="AddressEdit" type="LineEdit" parent="VBox/ConnectPanel/AddressRow"]
-size_flags_horizontal = 3
+[node name="JoinButton" type="Button" parent="Main/ConnectPanel/Choices"]
+custom_minimum_size = Vector2(330, 130)
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("PrimaryNormal")
+theme_override_styles/hover = SubResource("PrimaryHover")
+theme_override_styles/pressed = SubResource("PrimaryPressed")
+theme_override_styles/disabled = SubResource("PrimaryDisabled")
+text = "Join a game
+Use the host's code"
+
+[node name="JoinPanel" type="VBoxContainer" parent="Main/ConnectPanel"]
+visible = false
+theme_override_constants/separation = 14
+
+[node name="JoinCaption" type="Label" parent="Main/ConnectPanel/JoinPanel"]
+horizontal_alignment = 1
+text = "Type the room code the host gave you (like S4ND-AX2S), or their address."
+
+[node name="AddressEdit" type="LineEdit" parent="Main/ConnectPanel/JoinPanel"]
+custom_minimum_size = Vector2(480, 48)
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 22
+alignment = 1
 text = "127.0.0.1"
-placeholder_text = "IP address or room code"
+placeholder_text = "Room code or address"
 
-[node name="ButtonRow" type="HBoxContainer" parent="VBox/ConnectPanel"]
+[node name="JoinButtons" type="HBoxContainer" parent="Main/ConnectPanel/JoinPanel"]
 alignment = 1
-theme_override_constants/separation = 10
+theme_override_constants/separation = 14
 
-[node name="HostButton" type="Button" parent="VBox/ConnectPanel/ButtonRow"]
-custom_minimum_size = Vector2(140, 0)
-text = "Host a Match"
+[node name="ConnectButton" type="Button" parent="Main/ConnectPanel/JoinPanel/JoinButtons"]
+custom_minimum_size = Vector2(200, 52)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("PrimaryNormal")
+theme_override_styles/hover = SubResource("PrimaryHover")
+theme_override_styles/pressed = SubResource("PrimaryPressed")
+theme_override_styles/disabled = SubResource("PrimaryDisabled")
+text = "Connect"
 
-[node name="JoinButton" type="Button" parent="VBox/ConnectPanel/ButtonRow"]
-custom_minimum_size = Vector2(140, 0)
-text = "Join"
+[node name="CancelJoinButton" type="Button" parent="Main/ConnectPanel/JoinPanel/JoinButtons"]
+custom_minimum_size = Vector2(140, 52)
+text = "Back"
 
-[node name="RoomPanel" type="VBoxContainer" parent="VBox"]
-visible = false
-theme_override_constants/separation = 10
-
-[node name="RoomTitle" type="Label" parent="VBox/RoomPanel"]
-horizontal_alignment = 1
-text = "ROOM"
-
-[node name="ModeRow" type="HBoxContainer" parent="VBox/RoomPanel"]
-alignment = 1
-theme_override_constants/separation = 10
-
-[node name="FFAButton" type="Button" parent="VBox/RoomPanel/ModeRow"]
-custom_minimum_size = Vector2(130, 0)
-text = "Free-For-All"
-
-[node name="TeamButton" type="Button" parent="VBox/RoomPanel/ModeRow"]
-custom_minimum_size = Vector2(130, 0)
-text = "Teams"
-
-[node name="TeamRadial" type="Control" parent="VBox/RoomPanel"]
-visible = false
-script = ExtResource("2")
-
-[node name="PlayerList" type="VBoxContainer" parent="VBox/RoomPanel"]
-custom_minimum_size = Vector2(0, 140)
-theme_override_constants/separation = 4
-
-[node name="GenTitle" type="Label" parent="VBox/RoomPanel"]
-horizontal_alignment = 1
-text = "YOUR GEN"
-
-[node name="GenRadial" type="Control" parent="VBox/RoomPanel"]
-script = ExtResource("2")
-
-[node name="GenBlurb" type="Label" parent="VBox/RoomPanel"]
-horizontal_alignment = 1
-autowrap_mode = 2
-custom_minimum_size = Vector2(0, 40)
-
-[node name="RoomButtons" type="HBoxContainer" parent="VBox/RoomPanel"]
-alignment = 1
-theme_override_constants/separation = 10
-
-[node name="StartButton" type="Button" parent="VBox/RoomPanel/RoomButtons"]
-custom_minimum_size = Vector2(140, 0)
-text = "Start Match"
-
-[node name="MicButton" type="Button" parent="VBox/RoomPanel/RoomButtons"]
-custom_minimum_size = Vector2(110, 0)
-text = "Mic: On"
-
-[node name="LeaveButton" type="Button" parent="VBox/RoomPanel/RoomButtons"]
-custom_minimum_size = Vector2(140, 0)
-text = "Leave Room"
-
-[node name="BackButton" type="Button" parent="VBox"]
+[node name="BackButton" type="Button" parent="Main/ConnectPanel"]
+custom_minimum_size = Vector2(200, 40)
+size_flags_horizontal = 4
 text = "Back to Menu"
 
-[connection signal="pressed" from="VBox/ConnectPanel/ButtonRow/HostButton" to="." method="_on_host_pressed"]
-[connection signal="pressed" from="VBox/ConnectPanel/ButtonRow/JoinButton" to="." method="_on_join_pressed"]
-[connection signal="pressed" from="VBox/RoomPanel/ModeRow/FFAButton" to="." method="_on_ffa_pressed"]
-[connection signal="pressed" from="VBox/RoomPanel/ModeRow/TeamButton" to="." method="_on_team_mode_pressed"]
-[connection signal="pressed" from="VBox/RoomPanel/RoomButtons/StartButton" to="." method="_on_start_pressed"]
-[connection signal="pressed" from="VBox/RoomPanel/RoomButtons/MicButton" to="." method="_on_mic_pressed"]
-[connection signal="pressed" from="VBox/RoomPanel/RoomButtons/LeaveButton" to="." method="_on_leave_pressed"]
-[connection signal="pressed" from="VBox/BackButton" to="." method="_on_back_pressed"]
+[node name="RoomPanel" type="VBoxContainer" parent="Main"]
+visible = false
+size_flags_vertical = 3
+theme_override_constants/separation = 14
+
+[node name="CodeCard" type="PanelContainer" parent="Main/RoomPanel"]
+theme_override_styles/panel = SubResource("Card")
+
+[node name="CodeBox" type="VBoxContainer" parent="Main/RoomPanel/CodeCard"]
+theme_override_constants/separation = 2
+
+[node name="CodeCaption" type="Label" parent="Main/RoomPanel/CodeCard/CodeBox"]
+theme_override_colors/font_color = Color(0.7, 0.75, 0.85, 1)
+horizontal_alignment = 1
+text = "ROOM CODE  —  tell your friends"
+
+[node name="CodeLabel" type="Label" parent="Main/RoomPanel/CodeCard/CodeBox"]
+theme_override_colors/font_color = Color(0.55, 0.95, 0.75, 1)
+theme_override_font_sizes/font_size = 36
+horizontal_alignment = 1
+text = "XXXX-XXXX"
+
+[node name="CodeHint" type="Label" parent="Main/RoomPanel/CodeCard/CodeBox"]
+theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+text = ""
+
+[node name="Columns" type="HBoxContainer" parent="Main/RoomPanel"]
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="PlayersCard" type="PanelContainer" parent="Main/RoomPanel/Columns"]
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("Card")
+
+[node name="PlayersBox" type="VBoxContainer" parent="Main/RoomPanel/Columns/PlayersCard"]
+theme_override_constants/separation = 10
+
+[node name="RoomTitle" type="Label" parent="Main/RoomPanel/Columns/PlayersCard/PlayersBox"]
+theme_override_colors/font_color = Color(0.7, 0.75, 0.85, 1)
+text = "PLAYERS"
+
+[node name="PlayerList" type="VBoxContainer" parent="Main/RoomPanel/Columns/PlayersCard/PlayersBox"]
+theme_override_constants/separation = 8
+
+[node name="SideColumn" type="VBoxContainer" parent="Main/RoomPanel/Columns"]
+custom_minimum_size = Vector2(380, 0)
+theme_override_constants/separation = 14
+
+[node name="GenCard" type="PanelContainer" parent="Main/RoomPanel/Columns/SideColumn"]
+theme_override_styles/panel = SubResource("Card")
+
+[node name="GenBox" type="VBoxContainer" parent="Main/RoomPanel/Columns/SideColumn/GenCard"]
+theme_override_constants/separation = 10
+
+[node name="GenTitle" type="Label" parent="Main/RoomPanel/Columns/SideColumn/GenCard/GenBox"]
+theme_override_colors/font_color = Color(0.7, 0.75, 0.85, 1)
+text = "YOUR GEN"
+
+[node name="GenRadial" type="Control" parent="Main/RoomPanel/Columns/SideColumn/GenCard/GenBox"]
+script = ExtResource("2")
+
+[node name="GenBlurb" type="Label" parent="Main/RoomPanel/Columns/SideColumn/GenCard/GenBox"]
+custom_minimum_size = Vector2(0, 44)
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+autowrap_mode = 2
+
+[node name="ModeCard" type="PanelContainer" parent="Main/RoomPanel/Columns/SideColumn"]
+theme_override_styles/panel = SubResource("Card")
+
+[node name="ModeBox" type="VBoxContainer" parent="Main/RoomPanel/Columns/SideColumn/ModeCard"]
+theme_override_constants/separation = 10
+
+[node name="ModeTitle" type="Label" parent="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox"]
+theme_override_colors/font_color = Color(0.7, 0.75, 0.85, 1)
+text = "MODE"
+
+[node name="ModeRow" type="HBoxContainer" parent="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox"]
+theme_override_constants/separation = 10
+
+[node name="FFAButton" type="Button" parent="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow"]
+custom_minimum_size = Vector2(0, 40)
+size_flags_horizontal = 3
+text = "Free-For-All"
+
+[node name="TeamButton" type="Button" parent="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow"]
+custom_minimum_size = Vector2(0, 40)
+size_flags_horizontal = 3
+text = "Teams"
+
+[node name="ModeNote" type="Label" parent="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox"]
+theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 2
+
+[node name="TeamRadial" type="Control" parent="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox"]
+visible = false
+script = ExtResource("2")
+
+[node name="FooterBox" type="VBoxContainer" parent="Main/RoomPanel"]
+theme_override_constants/separation = 6
+
+[node name="Footer" type="HBoxContainer" parent="Main/RoomPanel/FooterBox"]
+alignment = 1
+theme_override_constants/separation = 14
+
+[node name="StartButton" type="Button" parent="Main/RoomPanel/FooterBox/Footer"]
+custom_minimum_size = Vector2(280, 58)
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("PrimaryNormal")
+theme_override_styles/hover = SubResource("PrimaryHover")
+theme_override_styles/pressed = SubResource("PrimaryPressed")
+theme_override_styles/disabled = SubResource("PrimaryDisabled")
+text = "Start match"
+
+[node name="MicButton" type="Button" parent="Main/RoomPanel/FooterBox/Footer"]
+custom_minimum_size = Vector2(120, 58)
+text = "Mic: On"
+
+[node name="LeaveButton" type="Button" parent="Main/RoomPanel/FooterBox/Footer"]
+custom_minimum_size = Vector2(120, 58)
+text = "Leave"
+
+[node name="StartHint" type="Label" parent="Main/RoomPanel/FooterBox"]
+theme_override_colors/font_color = Color(0.75, 0.78, 0.86, 1)
+horizontal_alignment = 1
+
+[connection signal="pressed" from="Main/ConnectPanel/Choices/HostButton" to="." method="_on_host_pressed"]
+[connection signal="pressed" from="Main/ConnectPanel/Choices/JoinButton" to="." method="_on_join_choice_pressed"]
+[connection signal="pressed" from="Main/ConnectPanel/JoinPanel/JoinButtons/ConnectButton" to="." method="_on_join_pressed"]
+[connection signal="pressed" from="Main/ConnectPanel/JoinPanel/JoinButtons/CancelJoinButton" to="." method="_on_cancel_join_pressed"]
+[connection signal="pressed" from="Main/ConnectPanel/BackButton" to="." method="_on_back_pressed"]
+[connection signal="pressed" from="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow/FFAButton" to="." method="_on_ffa_pressed"]
+[connection signal="pressed" from="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow/TeamButton" to="." method="_on_team_mode_pressed"]
+[connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/StartButton" to="." method="_on_start_pressed"]
+[connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/MicButton" to="." method="_on_mic_pressed"]
+[connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/LeaveButton" to="." method="_on_leave_pressed"]
