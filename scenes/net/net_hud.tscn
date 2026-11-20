@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/net/net_hud.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ui/virtual_joystick.tscn" id="2"]
@@ -18,6 +18,22 @@ fill = 1
 fill_from = Vector2(0.5, 0.5)
 fill_to = Vector2(1, 1)
 
+[sub_resource type="StyleBoxFlat" id="Card"]
+bg_color = Color(0.05, 0.05, 0.07, 0.8)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.3, 0.36, 0.85)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 12.0
+content_margin_top = 9.0
+content_margin_right = 12.0
+content_margin_bottom = 9.0
+
 [node name="NetHUD" type="CanvasLayer"]
 script = ExtResource("1")
 
@@ -35,52 +51,116 @@ anchor_bottom = 1.0
 color = Color(0.2, 1, 0.35, 0.16)
 mouse_filter = 2
 
-[node name="HPLabel" type="Label" parent="."]
+[node name="DamageFlash" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.8, 0.04, 0.04, 0)
+mouse_filter = 2
+
+[node name="StatusCard" type="PanelContainer" parent="."]
 offset_left = 12.0
 offset_top = 10.0
-offset_right = 220.0
-offset_bottom = 34.0
-theme_override_font_sizes/font_size = 18
-text = "HP  5 / 5"
+offset_right = 262.0
+offset_bottom = 96.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Card")
 
-[node name="AliveLabel" type="Label" parent="."]
-offset_left = 12.0
-offset_top = 38.0
-offset_right = 220.0
-offset_bottom = 60.0
+[node name="Box" type="VBoxContainer" parent="StatusCard"]
+mouse_filter = 2
+theme_override_constants/separation = 5
+
+[node name="HPRow" type="HBoxContainer" parent="StatusCard/Box"]
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="HPLabel" type="Label" parent="StatusCard/Box/HPRow"]
+theme_override_font_sizes/font_size = 15
+text = "HP"
+
+[node name="HPBar" type="ProgressBar" parent="StatusCard/Box/HPRow"]
+custom_minimum_size = Vector2(0, 20)
+size_flags_horizontal = 3
+size_flags_vertical = 4
+max_value = 5.0
+value = 5.0
+show_percentage = false
+
+[node name="HPText" type="Label" parent="StatusCard/Box/HPRow/HPBar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "5 / 5"
+
+[node name="AliveLabel" type="Label" parent="StatusCard/Box"]
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+theme_override_font_sizes/font_size = 14
 text = "Alive  0 / 0"
 
-[node name="GenLabel" type="Label" parent="."]
-offset_left = 12.0
-offset_top = 66.0
-offset_right = 420.0
-offset_bottom = 88.0
-modulate = Color(0.8, 0.9, 1, 1)
+[node name="MicLabel" type="Label" parent="StatusCard/Box"]
+theme_override_colors/font_color = Color(0.6, 0.9, 0.7, 0.9)
+theme_override_font_sizes/font_size = 12
 
-[node name="HintLabel" type="Label" parent="."]
-offset_left = 12.0
-offset_top = 90.0
-offset_right = 620.0
-offset_bottom = 112.0
+[node name="GenCard" type="PanelContainer" parent="."]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -190.0
+offset_top = -112.0
+offset_right = 190.0
+offset_bottom = -14.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Card")
+
+[node name="Box" type="VBoxContainer" parent="GenCard"]
+mouse_filter = 2
+theme_override_constants/separation = 5
+
+[node name="NameRow" type="HBoxContainer" parent="GenCard/Box"]
+mouse_filter = 2
+
+[node name="GenLabel" type="Label" parent="GenCard/Box/NameRow"]
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 17
+
+[node name="KeyLabel" type="Label" parent="GenCard/Box/NameRow"]
+theme_override_colors/font_color = Color(0.75, 0.8, 0.9, 1)
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 2
+
+[node name="GenBar" type="ProgressBar" parent="GenCard/Box"]
+custom_minimum_size = Vector2(0, 12)
+max_value = 1.0
+value = 1.0
+show_percentage = false
+
+[node name="HintLabel" type="Label" parent="GenCard/Box"]
+custom_minimum_size = Vector2(0, 18)
+theme_override_colors/font_color = Color(0.85, 0.88, 0.95, 0.85)
 theme_override_font_sizes/font_size = 13
-modulate = Color(1, 1, 1, 0.75)
+autowrap_mode = 2
 
-[node name="MicLabel" type="Label" parent="."]
-offset_left = 12.0
-offset_top = 114.0
-offset_right = 320.0
-offset_bottom = 136.0
-theme_override_font_sizes/font_size = 13
-modulate = Color(0.7, 1, 0.8, 0.85)
+[node name="StatusLabel" type="Label" parent="."]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -300.0
+offset_top = 8.0
+offset_right = 300.0
+offset_bottom = 36.0
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
 
-[node name="MicButton" type="Button" parent="."]
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -96.0
-offset_top = 10.0
-offset_right = -12.0
-offset_bottom = 42.0
-text = "Mic"
+[node name="AnnounceBox" type="VBoxContainer" parent="."]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -300.0
+offset_top = 40.0
+offset_right = 300.0
+offset_bottom = 140.0
+mouse_filter = 2
+theme_override_constants/separation = 2
 
 [node name="Minimap" type="Control" parent="."]
 anchor_left = 1.0
@@ -92,25 +172,23 @@ offset_bottom = 206.0
 mouse_filter = 2
 script = ExtResource("9")
 
-[node name="StatusLabel" type="Label" parent="."]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -300.0
-offset_top = 8.0
-offset_right = 300.0
-offset_bottom = 34.0
-theme_override_font_sizes/font_size = 18
-horizontal_alignment = 1
+[node name="MicButton" type="Button" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -90.0
+offset_top = 10.0
+offset_right = -12.0
+offset_bottom = 42.0
+text = "Mic"
 
-[node name="AnnounceLabel" type="Label" parent="."]
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -300.0
-offset_top = 40.0
-offset_right = 300.0
-offset_bottom = 62.0
-horizontal_alignment = 1
-modulate = Color(1, 0.85, 0.5, 1)
+[node name="MenuButton" type="Button" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -176.0
+offset_top = 10.0
+offset_right = -98.0
+offset_bottom = 42.0
+text = "Menu"
 
 [node name="Joystick" parent="." instance=ExtResource("2")]
 anchor_top = 1.0
@@ -167,33 +245,95 @@ mouse_filter = 1
 [node name="Dim" type="ColorRect" parent="Results"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0, 0, 0, 0.65)
+color = Color(0, 0, 0, 0.7)
 mouse_filter = 2
 
-[node name="VBox" type="VBoxContainer" parent="Results"]
+[node name="Panel" type="PanelContainer" parent="Results"]
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -160.0
-offset_top = -80.0
-offset_right = 160.0
-offset_bottom = 80.0
+offset_left = -250.0
+offset_top = -150.0
+offset_right = 250.0
+offset_bottom = 150.0
+theme_override_styles/panel = SubResource("Card")
+
+[node name="VBox" type="VBoxContainer" parent="Results/Panel"]
 theme_override_constants/separation = 14
 alignment = 1
 
-[node name="ResultLabel" type="Label" parent="Results/VBox"]
+[node name="ResultLabel" type="Label" parent="Results/Panel/VBox"]
+theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 autowrap_mode = 2
-theme_override_font_sizes/font_size = 26
 text = "Match over"
 
-[node name="ReturnButton" type="Button" parent="Results/VBox"]
+[node name="FlavorLabel" type="Label" parent="Results/Panel/VBox"]
+custom_minimum_size = Vector2(0, 30)
+theme_override_colors/font_color = Color(0.78, 0.8, 0.88, 0.9)
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ReturnButton" type="Button" parent="Results/Panel/VBox"]
+custom_minimum_size = Vector2(0, 48)
 text = "Return to Lobby"
 
-[node name="LeaveButton" type="Button" parent="Results/VBox"]
+[node name="LeaveButton" type="Button" parent="Results/Panel/VBox"]
+custom_minimum_size = Vector2(0, 40)
 text = "Leave"
 
+[node name="PauseMenu" type="Control" parent="."]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 1
+
+[node name="Dim" type="ColorRect" parent="PauseMenu"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.6)
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="PauseMenu"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -120.0
+offset_right = 150.0
+offset_bottom = 120.0
+theme_override_styles/panel = SubResource("Card")
+
+[node name="VBox" type="VBoxContainer" parent="PauseMenu/Panel"]
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="Title" type="Label" parent="PauseMenu/Panel/VBox"]
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
+text = "The match goes on"
+
+[node name="PauseNote" type="Label" parent="PauseMenu/Panel/VBox"]
+custom_minimum_size = Vector2(0, 36)
+theme_override_colors/font_color = Color(0.75, 0.78, 0.86, 0.9)
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ResumeButton" type="Button" parent="PauseMenu/Panel/VBox"]
+custom_minimum_size = Vector2(0, 44)
+text = "Back to the fight"
+
+[node name="LeaveMatchButton" type="Button" parent="PauseMenu/Panel/VBox"]
+custom_minimum_size = Vector2(0, 40)
+text = "Leave the match"
+
 [connection signal="pressed" from="MicButton" to="." method="_on_mic_pressed"]
-[connection signal="pressed" from="Results/VBox/ReturnButton" to="." method="_on_return_pressed"]
-[connection signal="pressed" from="Results/VBox/LeaveButton" to="." method="_on_leave_pressed"]
+[connection signal="pressed" from="MenuButton" to="." method="_on_menu_pressed"]
+[connection signal="pressed" from="Results/Panel/VBox/ReturnButton" to="." method="_on_return_pressed"]
+[connection signal="pressed" from="Results/Panel/VBox/LeaveButton" to="." method="_on_leave_pressed"]
+[connection signal="pressed" from="PauseMenu/Panel/VBox/ResumeButton" to="." method="_on_resume_pressed"]
+[connection signal="pressed" from="PauseMenu/Panel/VBox/LeaveMatchButton" to="." method="_on_leave_match_pressed"]

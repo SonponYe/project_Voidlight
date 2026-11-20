@@ -301,14 +301,20 @@ func _local_update(delta: float) -> void:
 		if not multiplayer.is_server():
 			_send_aim.rpc_id(1, _aim)
 
-	if Input.is_action_just_pressed("shoot") and _cooldown_left <= 0.0 and not camouflaged:
+	if Input.is_action_just_pressed("shoot") and _cooldown_left <= 0.0 and not camouflaged and not _hud_blocks():
 		_cooldown_left = fire_cooldown
 		if multiplayer.is_server():
 			_server_shoot(_aim)
 		else:
 			_request_shoot.rpc_id(1, _aim)
 
-	_gen_input(delta)
+	if not _hud_blocks():
+		_gen_input(delta)
+
+
+func _hud_blocks() -> bool:
+	var hud := get_tree().get_first_node_in_group("net_hud")
+	return hud != null and hud.blocks_play()
 
 
 func _gen_input(delta: float) -> void:
