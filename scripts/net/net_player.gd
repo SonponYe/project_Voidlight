@@ -40,15 +40,19 @@ const SHIELD_COLOR := Color(0.4, 0.9, 1.0)
 const HAUNT_COLOR := Color(0.8, 0.4, 1.0)
 ## Holding the Gen key this long drops a manual bomb instead of a proximity one.
 const BOMB_HOLD_SECONDS := 0.4
-const DISGUISE_SIZE := 44.0
+const DISGUISE_SIZE := 36.0
 ## One look per player slot (Kenney's Top-down Shooter characters, CC0). If a
 ## file is missing the game falls back to the coloured arrow, so a bad path
 ## never breaks a match.
 const LOOKS := ["manBlue_gun.png", "robot1_gun.png", "hitman1_gun.png", "manBrown_gun.png", "soldier1_gun.png"]
-const SPRITE_SCALE := 1.25
+const SPRITE_SCALE := 0.78
 ## Drawn bigger than the collision circle so players read clearly from above.
-const BODY_SCALE := 1.8
-const NAME_OFFSET := Vector2(-50, -58)
+const BODY_SCALE := 1.2
+const NAME_OFFSET := Vector2(-50, -46)
+## Sizes of the things drawn around a character, shared with the Decoy.
+const SHADOW_RADIUS := 12.0
+const TEAM_RING_RADIUS := 16.5
+const FRIEND_RING_RADIUS := 22.0
 
 ## Movement smoothing. The server's position is replicated as net_pos (NOT
 ## as the node's own position, which would overwrite the owner's local
@@ -106,6 +110,7 @@ var _last_sent_aim := 0.0
 var _last_hp := -1
 var _flash_time := 0.0
 var _use_sprite := false
+var walk := WalkCycle.new()
 var _aim_send_timer := 0.0
 var _cooldown_left := 0.0
 var _gen_hold := 0.0
@@ -242,6 +247,9 @@ func _process(delta: float) -> void:
 	if not multiplayer.is_server() and not _is_mine():
 		_smooth_remote(delta)
 	name_label.global_position = global_position + NAME_OFFSET  # pinned above, however they turn
+	walk.tick(delta, global_position, rotation)
+	if _use_sprite:
+		walk.apply(body, SPRITE_SCALE)
 	disguise.rotation = -rotation
 	var alpha := 0.25 if dead else (0.45 if link_state != 0 else 1.0)
 	visual.modulate.a = alpha
@@ -266,19 +274,20 @@ func _draw() -> void:
 	# no ring, a square shadow.
 	var drop := Vector2(4, 6).rotated(-rotation)
 	if camouflaged:
-		draw_rect(Rect2(Vector2(-18, -18) + drop, Vector2(36, 36)), Color(0, 0, 0, 0.22))
+		draw_rect(Rect2(Vector2(-15, -15) + drop, Vector2(30, 30)), Color(0, 0, 0, 0.22))
 	elif not dead:
-		draw_circle(drop, 17.0, Color(0, 0, 0, 0.24))
+		draw_circle(drop * 0.8, SHADOW_RADIUS, Color(0, 0, 0, 0.24))
+		walk.draw_feet(self)
 		if TEAM_COLORS.has(team):
-			draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 28, Color(TEAM_COLORS[team], 0.85), 2.5)
+			draw_arc(Vector2.ZERO, TEAM_RING_RADIUS, 0.0, TAU, 28, Color(TEAM_COLORS[team], 0.85), 2.5)
 	if shield_hp > 0:
 		var strength := float(shield_hp) / float(Gens.def("shield").get("shield_hp", 1))
-		draw_arc(Vector2.ZERO, 31.0, 0.0, TAU, 32, Color(SHIELD_COLOR, 0.35 + 0.5 * strength), 2.5)
+		draw_arc(Vector2.ZERO, 23.0, 0.0, TAU, 32, Color(SHIELD_COLOR, 0.35 + 0.5 * strength), 2.5)
 	if haunted:
-		draw_arc(Vector2.ZERO, 38.0, 0.0, TAU, 24, HAUNT_COLOR, 2.0)
-		draw_circle(Vector2(0, -56).rotated(-rotation), 5.0, HAUNT_COLOR)
+		draw_arc(Vector2.ZERO, 28.0, 0.0, TAU, 24, HAUNT_COLOR, 2.0)
+		draw_circle(Vector2(0, -38).rotated(-rotation), 5.0, HAUNT_COLOR)
 	if Voice.is_speaking(owner_peer_id):
-		var at := Vector2(0, -56).rotated(-rotation)
+		var at := Vector2(0, -50).rotated(-rotation)
 		draw_circle(at, 4.0, Color(0.4, 1.0, 0.5))
 		draw_arc(at, 7.0, 0.0, TAU, 16, Color(0.4, 1.0, 0.5, 0.5), 1.5)
 	if not _is_mine():
@@ -580,8 +589,9 @@ func _burst(at: Vector2, radius: float, color: Color, life: float) -> void:
 @rpc("authority", "call_local", "unreliable")
 func _shot_fx(from: Vector2, to: Vector2) -> void:
 	reveal_timer = REVEAL_ON_SHOT
+	walk.kick()
 	var along := (to - from).normalized()
-	_burst(from + along * 30.0, 9.0, Color(1.0, 0.95, 0.6), 0.09)  # muzzle flash
+	_burst(from + along * 22.0, 8.0, Color(1.0, 0.95, 0.6), 0.09)  # muzzle flash
 	_burst(to, 8.0, Color(1.0, 0.55, 0.15), 0.16)  # where it landed
 	var tracer := Line2D.new()
 	tracer.width = 3.0

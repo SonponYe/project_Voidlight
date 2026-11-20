@@ -21,6 +21,7 @@ var target_id := 0
 var display_name := ""
 var color := Color.WHITE
 var look := 0
+var walk := WalkCycle.new()
 var _use_sprite := false
 var lifespan := 20.0
 
@@ -82,17 +83,21 @@ func _is_friendly() -> bool:
 
 func _draw() -> void:
 	# Exactly what a real player gets (shadow, team ring), so it can't be told apart.
-	draw_circle(Vector2(4, 6).rotated(-rotation), 17.0, Color(0, 0, 0, 0.24))
+	draw_circle(Vector2(4, 6).rotated(-rotation) * 0.8, NetPlayer.SHADOW_RADIUS, Color(0, 0, 0, 0.24))
+	walk.draw_feet(self)
 	if NetPlayer.TEAM_COLORS.has(team):
-		draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 28, Color(NetPlayer.TEAM_COLORS[team], 0.85), 2.5)
+		draw_arc(Vector2.ZERO, NetPlayer.TEAM_RING_RADIUS, 0.0, TAU, 28, Color(NetPlayer.TEAM_COLORS[team], 0.85), 2.5)
 	if _is_friendly():
-		draw_arc(Vector2.ZERO, 30.0, 0.0, TAU, 24, FRIEND_RING, 1.5)
+		draw_arc(Vector2.ZERO, NetPlayer.FRIEND_RING_RADIUS, 0.0, TAU, 24, FRIEND_RING, 1.5)
 
 
 func _process(delta: float) -> void:
 	if not Network.has_peer():
 		return
 	name_label.global_position = global_position + NetPlayer.NAME_OFFSET
+	walk.tick(delta, global_position, rotation)
+	if _use_sprite:
+		walk.apply(body, NetPlayer.SPRITE_SCALE)
 	queue_redraw()
 	if multiplayer.is_server():
 		return
