@@ -72,6 +72,13 @@ theme_override_font_sizes/font_size = 30
 horizontal_alignment = 1
 text = "ONLINE"
 
+[node name="LoreLabel" type="Label" parent="Main"]
+visible = false
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 0.9)
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+autowrap_mode = 2
+
 [node name="StatusLabel" type="Label" parent="Main"]
 custom_minimum_size = Vector2(0, 24)
 theme_override_colors/font_color = Color(1, 0.82, 0.5, 1)

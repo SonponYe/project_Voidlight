@@ -137,7 +137,7 @@ func _begin_match() -> void:
 		if id != 1 and Network.ready_peers.has(id):
 			_spawn_for_peer(id)
 	_is_contest = _participants.size() >= 2
-	_set_status.rpc("Fight!")
+	_set_status.rpc(Story.pick("match_start", "Fight!"))
 	_check_win()
 
 
@@ -197,7 +197,7 @@ func _name_of(id: int) -> String:
 
 
 func _on_player_died(id: int) -> void:
-	_announce.rpc("%s was eliminated" % _name_of(id))
+	_announce.rpc(Story.pick("eliminated", "{name} was eliminated", {"name": _name_of(id)}))
 	_check_win()
 
 
@@ -252,14 +252,14 @@ func _check_win() -> void:
 		if teams_alive.size() > 1:
 			return
 		if teams_alive.size() == 1:
-			text = "%s wins!" % Network.team_name(teams_alive.keys()[0])
+			text = Story.pick("win", "{name} wins!", {"name": Network.team_name(teams_alive.keys()[0])})
 	else:
 		if alive.size() > 1:
 			return
 		if alive.size() == 1:
-			text = "%s wins!" % _name_of(alive[0])
+			text = Story.pick("win", "{name} wins!", {"name": _name_of(alive[0])})
 	_match_over = true
-	_show_results.rpc(text)
+	_show_results.rpc(text, Story.pick("epilogue"))
 
 
 # ---------------------------------------------------------------------------
@@ -493,9 +493,9 @@ func _announce(text: String) -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func _show_results(text: String) -> void:
+func _show_results(text: String, flavor: String) -> void:
 	_match_over = true
-	hud.show_results(text, Network.is_leader())
+	hud.show_results(text, Network.is_leader(), flavor)
 
 
 # ---------------------------------------------------------------------------

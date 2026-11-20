@@ -1,0 +1,31 @@
+{
+	"_about": "This file is where the game's words live. Each list below is picked from at random, so write as many lines as you like. Leave a list empty ([]) to keep the game's default wording. {name} is replaced by a player's name (or a team's) where noted. Save the file and restart the game to see changes.",
+
+	"lobby": [],
+
+	"match_start": [],
+
+	"eliminated": [],
+
+	"win": [],
+
+	"epilogue": [],
+
+	"gens": {
+		"shield": "",
+		"camouflage": "",
+		"poltergeist": "",
+		"blackout": "",
+		"bomb_voyage": "",
+		"decoy": ""
+	},
+
+	"_where_each_list_shows": {
+		"lobby": "one line under the ONLINE title in the lobby",
+		"match_start": "the banner when a match begins (default: Fight!)",
+		"eliminated": "the message when a player dies; use {name} (default: {name} was eliminated)",
+		"win": "the winner headline on the results screen; use {name} (default: {name} wins!)",
+		"epilogue": "a line under the winner headline on the results screen",
+		"gens": "one line of lore shown under each Gen's description when picking it"
+	}
+}

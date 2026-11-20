@@ -8,6 +8,7 @@ extends Control
 @onready var connect_panel: VBoxContainer = $Main/ConnectPanel
 @onready var room_panel: VBoxContainer = $Main/RoomPanel
 @onready var status_label: Label = $Main/StatusLabel
+@onready var lore_label: Label = $Main/LoreLabel
 @onready var name_edit: LineEdit = $Main/ConnectPanel/NameRow/NameEdit
 @onready var choices: HBoxContainer = $Main/ConnectPanel/Choices
 @onready var host_button: Button = $Main/ConnectPanel/Choices/HostButton
@@ -42,6 +43,8 @@ var _talk_timer := 0.0
 
 func _ready() -> void:
 	name_edit.text = Network.local_name
+	lore_label.text = Story.pick("lobby")
+	lore_label.visible = lore_label.text != ""
 	_build_pickers()
 	Network.player_list_changed.connect(_refresh_room)
 	Network.connection_failed.connect(_on_connection_failed)
@@ -182,7 +185,8 @@ func _on_team_picked(key: String) -> void:
 
 func _refresh_gen_buttons() -> void:
 	gen_radial.set_selected(Network.local_gen)
-	gen_blurb.text = Gens.def(Network.local_gen)["blurb"]
+	var lore := Story.gen_line(Network.local_gen)
+	gen_blurb.text = Gens.def(Network.local_gen)["blurb"] + ("\n" + lore if lore != "" else "")
 
 
 func _refresh_room() -> void:
