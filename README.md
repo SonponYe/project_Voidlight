@@ -124,6 +124,23 @@ These are the things worth pinning down before sinking real time into the networ
 
 ---
 
+## Story & words
+
+The game is meant to hold people with its premise and mood rather than effects, so its words live in one editable file: **`assets/story/story.json`**. Each list is picked from at random, so write as many lines as you like; an empty list keeps the game's default wording. `{name}` becomes a player's (or team's) name where noted. Save and restart to see changes.
+
+| Key | Where it shows |
+|---|---|
+| `lobby` | one line under the ONLINE title in the lobby |
+| `match_start` | the banner when a match begins (default: *Fight!*) |
+| `eliminated` | the message when a player dies; `{name}` (default: *{name} was eliminated*) |
+| `win` | the winner headline on the results screen; `{name}` (default: *{name} wins!*) |
+| `epilogue` | a line under the winner headline |
+| `gens` | one line of lore per Gen, shown under its description when picking it |
+
+The host makes each pick and sends it, so every player sees the same line. The file ships empty on purpose — nothing is invented for you.
+
+---
+
 ## Controls
 
 Every action maps to a named input action in `project.godot`, so adding another input scheme later means configuring that action, not touching gameplay code.
@@ -139,7 +156,7 @@ Every action maps to a named input action in `project.godot`, so adding another 
 | Toggle flashlight on/off | `F` or `Right Click` |
 | Use Gen | `Q` (online Bomb Voyage: tap = proximity bomb, hold = manual bomb) |
 | Detonate manual bombs (online, Bomb Voyage) | `E` |
-| Pause | `Escape` |
+| Pause (solo/versus) — or, online, open the match menu (**the match keeps going**; you can still be hit) | `Escape` |
 | Debug overlay *(dev only)* | `F1` |
 
 **Player 2 (keyboard, for local Versus matches on one keyboard):**
@@ -331,6 +348,7 @@ VersusArena (Control, versus_manager.gd)
 | `net_bomb.gd` *(`NetBomb`)* | A placed Bomb Voyage bomb: static marker carrying owner + trigger mode; the arena decides when it blows |
 | `net_map.gd` *(`NetMap`)* | The online map: parses the layout text (walls, cover, wrecks, barrels, decor, spawn markers), merges solids into the fewest rectangles with colliders and light occluders, exposes spawn positions, and bakes the look into a texture once |
 | `net_map_painter.gd` | Paints the ruins (ground, grime, damage, props) from a fixed seed inside a SubViewport that renders **once** — the same detail drawn every frame measured 1.8 fps on an Intel HD 520; baked it's 60+ |
+| `story.gd` *(`Story`)* | Reads `assets/story/story.json` and hands out the game's words with fallbacks; the host picks so everyone sees the same line |
 | `net_minimap.gd` | Corner minimap: layout always, players only if you're allowed to know where they are |
 | `net_hud.gd` | Online HUD: HP, alive count, Gen state + contextual hint, status line, timed announcements, the touch controls (incl. Gen and detonate buttons), Blackout night-vision tint, and the end-of-match overlay |
 
