@@ -1,31 +1,26 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/virtual_joystick.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/mobile/joystick_circle_pad_a.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/mobile/joystick_circle_nub_a.png" id="3"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_base"]
-bg_color = Color(1, 1, 1, 0.18)
-corner_radius_top_left = 60
-corner_radius_top_right = 60
-corner_radius_bottom_right = 60
-corner_radius_bottom_left = 60
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_base"]
+texture = ExtResource("2")
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_knob"]
-bg_color = Color(1, 1, 1, 0.55)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_knob"]
+texture = ExtResource("3")
 
 [node name="VirtualJoystick" type="Control"]
 mouse_filter = 2
 script = ExtResource("1")
 
 [node name="Base" type="Panel" parent="."]
+modulate = Color(1, 1, 1, 0.9)
 custom_minimum_size = Vector2(120, 120)
 offset_right = 120.0
 offset_bottom = 120.0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_base")
+theme_override_styles/panel = SubResource("StyleBoxTexture_base")
 
 [node name="Knob" type="Panel" parent="Base"]
 custom_minimum_size = Vector2(50, 50)
@@ -34,4 +29,4 @@ offset_top = 35.0
 offset_right = 85.0
 offset_bottom = 85.0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_knob")
+theme_override_styles/panel = SubResource("StyleBoxTexture_knob")

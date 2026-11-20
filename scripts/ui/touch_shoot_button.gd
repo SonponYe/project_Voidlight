@@ -6,6 +6,8 @@ extends Control
 ## responsive layout the rest of the HUD relies on.
 
 @export var action_name: String = "shoot"
+## The picture shown on the button (white glyphs from the Kenney pack).
+@export var icon: Texture2D
 
 @onready var panel: Panel = $Panel
 
@@ -14,6 +16,9 @@ var _touch_index := -1
 
 func _ready() -> void:
 	visible = DisplayServer.is_touchscreen_available()
+	var glyph := get_node_or_null("Panel/Icon") as TextureRect
+	if glyph:
+		glyph.texture = icon
 
 
 func _input(event: InputEvent) -> void:

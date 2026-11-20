@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/virtual_joystick.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/ui/touch_aim_pad.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/ui/touch_shoot_button.tscn" id="5"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/mobile/icon_crosshair.png" id="30"]
 
 [node name="HUD" type="CanvasLayer"]
 process_mode = 3
@@ -73,6 +74,7 @@ anchor_bottom = 1.0
 offset_bottom = -120.0
 
 [node name="ShootButton" parent="." instance=ExtResource("5")]
+icon = ExtResource("30")
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0

@@ -5,6 +5,9 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/touch_aim_pad.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/ui/touch_shoot_button.tscn" id="4"]
 [ext_resource type="Script" path="res://scripts/net/net_minimap.gd" id="9"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/mobile/icon_crosshair.png" id="20"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/mobile/icon_star.png" id="21"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/mobile/icon_burst.png" id="22"]
 
 [sub_resource type="Gradient" id="Gradient_vignette"]
 offsets = PackedFloat32Array(0, 0.55, 1)
@@ -205,6 +208,7 @@ anchor_bottom = 1.0
 offset_bottom = -230.0
 
 [node name="ShootButton" parent="." instance=ExtResource("4")]
+icon = ExtResource("20")
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
@@ -215,6 +219,7 @@ offset_right = -14.0
 offset_bottom = -14.0
 
 [node name="GenButton" parent="." instance=ExtResource("4")]
+icon = ExtResource("21")
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
@@ -226,6 +231,7 @@ offset_bottom = -124.0
 action_name = "use_power"
 
 [node name="DetonateButton" parent="." instance=ExtResource("4")]
+icon = ExtResource("22")
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
