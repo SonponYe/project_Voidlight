@@ -20,6 +20,8 @@ var team := 0
 var target_id := 0
 var display_name := ""
 var color := Color.WHITE
+var look := 0
+var _use_sprite := false
 var lifespan := 20.0
 
 # Replicated by the host.
@@ -34,6 +36,7 @@ var _repath := 0.0
 var _hit_cooldown := 0.0
 
 @onready var visual: Polygon2D = $Visual
+@onready var body: Sprite2D = $Body
 @onready var outline: Line2D = $Outline
 @onready var name_label: Label = $NameLabel
 
@@ -43,6 +46,14 @@ func _ready() -> void:
 	net_rot = rotation
 	visual.color = color
 	visual.scale = Vector2.ONE * NetPlayer.BODY_SCALE
+	var texture := NetPlayer.look_texture(look)
+	_use_sprite = texture != null
+	body.texture = texture
+	name_label.top_level = true
+	body.scale = Vector2.ONE * NetPlayer.SPRITE_SCALE
+	body.visible = _use_sprite
+	visual.visible = not _use_sprite
+	outline.visible = not _use_sprite
 	outline.scale = Vector2.ONE * NetPlayer.BODY_SCALE
 	name_label.text = display_name
 	add_to_group("net_decoy")
@@ -81,7 +92,7 @@ func _draw() -> void:
 func _process(delta: float) -> void:
 	if not Network.has_peer():
 		return
-	name_label.rotation = -rotation
+	name_label.global_position = global_position + NetPlayer.NAME_OFFSET
 	queue_redraw()
 	if multiplayer.is_server():
 		return

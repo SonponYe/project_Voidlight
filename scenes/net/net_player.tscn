@@ -34,6 +34,9 @@ polygon = PackedVector2Array(12, 0, -8, 8, -4, 0, -8, -8)
 visible = false
 texture = ExtResource("2")
 
+[node name="Body" type="Sprite2D" parent="."]
+visible = false
+
 [node name="Outline" type="Line2D" parent="."]
 points = PackedVector2Array(12, 0, -8, 8, -4, 0, -8, -8)
 closed = true

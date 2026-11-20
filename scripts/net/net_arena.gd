@@ -154,6 +154,7 @@ func _spawn_for_peer(id: int) -> void:
 	var data := {
 		"id": id, "pos": pos, "gen": Network.player_gen(id), "team": team,
 		"name": Network.player_name(id),
+		"look": int(Network.players.get(id, {}).get("order", 0)),
 	}
 	var node := spawner.spawn(data) as NetPlayer
 	node.died.connect(_on_player_died)
@@ -178,6 +179,7 @@ func _spawn_player(data: Dictionary) -> Node:
 	player.gen = data["gen"]
 	player.team = data["team"]
 	player.display_name = data["name"]
+	player.look = data["look"]
 	player.position = data["pos"]
 	player.configure_replication()
 	return player
@@ -362,7 +364,7 @@ func spawn_decoy(caster: NetPlayer, prey: NetPlayer, lifespan: float) -> void:
 	decoy_spawner.spawn({
 		"id": _decoy_seq, "owner": caster.owner_peer_id, "team": caster.team,
 		"target": prey.owner_peer_id, "pos": caster.global_position,
-		"name": caster.display_name, "color": caster.visual.color, "life": lifespan,
+		"name": caster.display_name, "color": caster.visual.color, "life": lifespan, "look": caster.look,
 	})
 
 
@@ -375,6 +377,7 @@ func _spawn_decoy(data: Dictionary) -> Node:
 	decoy.target_id = data["target"]
 	decoy.display_name = data["name"]
 	decoy.color = data["color"]
+	decoy.look = data["look"]
 	decoy.lifespan = data["life"]
 	decoy.position = data["pos"]
 	decoy.configure_replication()

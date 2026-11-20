@@ -41,8 +41,14 @@ const HAUNT_COLOR := Color(0.8, 0.4, 1.0)
 ## Holding the Gen key this long drops a manual bomb instead of a proximity one.
 const BOMB_HOLD_SECONDS := 0.4
 const DISGUISE_SIZE := 44.0
+## One look per player slot (Kenney's Top-down Shooter characters, CC0). If a
+## file is missing the game falls back to the coloured arrow, so a bad path
+## never breaks a match.
+const LOOKS := ["manBlue_gun.png", "robot1_gun.png", "hitman1_gun.png", "manBrown_gun.png", "soldier1_gun.png"]
+const SPRITE_SCALE := 1.25
 ## Drawn bigger than the collision circle so players read clearly from above.
 const BODY_SCALE := 1.8
+const NAME_OFFSET := Vector2(-50, -58)
 
 ## Movement smoothing. The server's position is replicated as net_pos (NOT
 ## as the node's own position, which would overwrite the owner's local
@@ -65,6 +71,8 @@ const CORRECT_RATE := 6.0
 ## input do I predict locally and whose requests do I accept."
 var owner_peer_id: int = 1
 var gen := Gens.DEFAULT
+## Which character sprite (index into LOOKS); set at spawn.
+var look := 0
 ## 0 in free-for-all, 1 or 2 in team mode. Set at spawn time.
 var team := 0
 
@@ -97,6 +105,7 @@ var _aim := 0.0
 var _last_sent_aim := 0.0
 var _last_hp := -1
 var _flash_time := 0.0
+var _use_sprite := false
 var _aim_send_timer := 0.0
 var _cooldown_left := 0.0
 var _gen_hold := 0.0
@@ -104,6 +113,7 @@ var _joystick: Control = null
 var _aim_pad: Control = null
 
 @onready var visual: Polygon2D = $Visual
+@onready var body: Sprite2D = $Body
 @onready var outline: Line2D = $Outline
 @onready var disguise: Sprite2D = $Disguise
 @onready var collision: CollisionShape2D = $CollisionShape2D
@@ -119,6 +129,11 @@ func _ready() -> void:
 	add_to_group("net_player")
 	visual.color = TEAM_COLORS[team] if TEAM_COLORS.has(team) else COLORS[absi(owner_peer_id) % COLORS.size()]
 	disguise.scale = Vector2.ONE * (DISGUISE_SIZE / disguise.texture.get_width())
+	var texture := look_texture(look)
+	_use_sprite = texture != null
+	body.texture = texture
+	name_label.top_level = true
+	body.scale = Vector2.ONE * SPRITE_SCALE
 	visual.scale = Vector2.ONE * BODY_SCALE
 	outline.scale = Vector2.ONE * BODY_SCALE
 	_refresh_name()
@@ -149,6 +164,11 @@ func configure_replication() -> void:
 		config.property_set_replication_mode(path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
 	sync.replication_config = config
 	sync.replication_interval = REPLICATION_INTERVAL
+
+
+static func look_texture(index: int) -> Texture2D:
+	var path := "res://assets/sprites/player/%s" % LOOKS[index % LOOKS.size()]
+	return load(path) if ResourceLoader.exists(path) else null
 
 
 func _is_mine() -> bool:
@@ -216,19 +236,23 @@ func _process(delta: float) -> void:
 		_flash_time = 0.14
 	_last_hp = hp
 	_flash_time = maxf(0.0, _flash_time - delta)
-	visual.self_modulate = Color(2.4, 2.4, 2.4) if _flash_time > 0.0 else Color.WHITE
+	var flash := Color(2.4, 2.4, 2.4) if _flash_time > 0.0 else Color.WHITE
+	visual.self_modulate = flash
+	body.self_modulate = flash
 	if not multiplayer.is_server() and not _is_mine():
 		_smooth_remote(delta)
-	name_label.rotation = -rotation
+	name_label.global_position = global_position + NAME_OFFSET  # pinned above, however they turn
 	disguise.rotation = -rotation
 	var alpha := 0.25 if dead else (0.45 if link_state != 0 else 1.0)
 	visual.modulate.a = alpha
 	disguise.modulate.a = alpha
 	name_label.modulate.a = alpha
 	_refresh_name()
-	visual.visible = not camouflaged
-	outline.visible = not camouflaged
+	visual.visible = not camouflaged and not _use_sprite
+	outline.visible = visual.visible
 	outline.modulate.a = alpha
+	body.visible = not camouflaged and _use_sprite
+	body.modulate.a = alpha
 	disguise.visible = camouflaged
 	name_label.visible = not camouflaged
 	if dead and not collision.disabled:
