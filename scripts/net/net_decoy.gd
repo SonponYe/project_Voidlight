@@ -70,16 +70,19 @@ func _is_friendly() -> bool:
 
 
 func _draw() -> void:
+	# Exactly what a real player gets (shadow, team ring), so it can't be told apart.
+	draw_circle(Vector2(4, 6).rotated(-rotation), 17.0, Color(0, 0, 0, 0.24))
+	if NetPlayer.TEAM_COLORS.has(team):
+		draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 28, Color(NetPlayer.TEAM_COLORS[team], 0.85), 2.5)
 	if _is_friendly():
-		draw_arc(Vector2.ZERO, 18.0, 0.0, TAU, 24, FRIEND_RING, 1.5)
+		draw_arc(Vector2.ZERO, 30.0, 0.0, TAU, 24, FRIEND_RING, 1.5)
 
 
 func _process(delta: float) -> void:
 	if not Network.has_peer():
 		return
 	name_label.rotation = -rotation
-	if _is_friendly():
-		queue_redraw()
+	queue_redraw()
 	if multiplayer.is_server():
 		return
 	if position.distance_to(net_pos) > TELEPORT_DIST:

@@ -95,6 +95,8 @@ var haunted := false  # set by net_arena.gd when the LOCAL player is tracking th
 var _input_dir := Vector2.ZERO
 var _aim := 0.0
 var _last_sent_aim := 0.0
+var _last_hp := -1
+var _flash_time := 0.0
 var _aim_send_timer := 0.0
 var _cooldown_left := 0.0
 var _gen_hold := 0.0
@@ -111,6 +113,7 @@ var _aim_pad: Control = null
 
 func _ready() -> void:
 	hp = max_hp
+	_last_hp = max_hp
 	net_pos = position
 	net_rot = rotation
 	add_to_group("net_player")
@@ -208,6 +211,12 @@ func _process(delta: float) -> void:
 	if not Network.has_peer():
 		return
 	reveal_timer = maxf(0.0, reveal_timer - delta)
+	# A white flash on the body when hp drops, visible to everyone.
+	if _last_hp >= 0 and hp < _last_hp:
+		_flash_time = 0.14
+	_last_hp = hp
+	_flash_time = maxf(0.0, _flash_time - delta)
+	visual.self_modulate = Color(2.4, 2.4, 2.4) if _flash_time > 0.0 else Color.WHITE
 	if not multiplayer.is_server() and not _is_mine():
 		_smooth_remote(delta)
 	name_label.rotation = -rotation
@@ -228,11 +237,21 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
+	# A soft drop shadow (always falling the same way on screen) and, in team
+	# mode, a ring in the team's colour. A disguised player is just a crate:
+	# no ring, a square shadow.
+	var drop := Vector2(4, 6).rotated(-rotation)
+	if camouflaged:
+		draw_rect(Rect2(Vector2(-18, -18) + drop, Vector2(36, 36)), Color(0, 0, 0, 0.22))
+	elif not dead:
+		draw_circle(drop, 17.0, Color(0, 0, 0, 0.24))
+		if TEAM_COLORS.has(team):
+			draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 28, Color(TEAM_COLORS[team], 0.85), 2.5)
 	if shield_hp > 0:
 		var strength := float(shield_hp) / float(Gens.def("shield").get("shield_hp", 1))
-		draw_arc(Vector2.ZERO, 20.0, 0.0, TAU, 32, Color(SHIELD_COLOR, 0.35 + 0.5 * strength), 2.5)
+		draw_arc(Vector2.ZERO, 31.0, 0.0, TAU, 32, Color(SHIELD_COLOR, 0.35 + 0.5 * strength), 2.5)
 	if haunted:
-		draw_arc(Vector2.ZERO, 26.0, 0.0, TAU, 24, HAUNT_COLOR, 2.0)
+		draw_arc(Vector2.ZERO, 38.0, 0.0, TAU, 24, HAUNT_COLOR, 2.0)
 		draw_circle(Vector2(0, -56).rotated(-rotation), 5.0, HAUNT_COLOR)
 	if Voice.is_speaking(owner_peer_id):
 		var at := Vector2(0, -56).rotated(-rotation)
@@ -517,9 +536,29 @@ func bomb_exploded() -> void:
 	bombs_placed = maxi(0, bombs_placed - 1)
 
 
+## A small star that swells and fades — used for muzzle flashes and impacts.
+func _burst(at: Vector2, radius: float, color: Color, life: float) -> void:
+	var spark := Polygon2D.new()
+	var points := PackedVector2Array()
+	for i in 10:
+		points.append(Vector2.from_angle(TAU * i / 10.0) * radius * (1.0 if i % 2 == 0 else 0.45))
+	spark.polygon = points
+	spark.color = color
+	spark.position = at
+	spark.z_index = 5
+	get_parent().add_child(spark)
+	var tween := spark.create_tween().set_parallel(true)
+	tween.tween_property(spark, "scale", Vector2(1.9, 1.9), life)
+	tween.tween_property(spark, "modulate:a", 0.0, life)
+	tween.chain().tween_callback(spark.queue_free)
+
+
 @rpc("authority", "call_local", "unreliable")
 func _shot_fx(from: Vector2, to: Vector2) -> void:
 	reveal_timer = REVEAL_ON_SHOT
+	var along := (to - from).normalized()
+	_burst(from + along * 30.0, 9.0, Color(1.0, 0.95, 0.6), 0.09)  # muzzle flash
+	_burst(to, 8.0, Color(1.0, 0.55, 0.15), 0.16)  # where it landed
 	var tracer := Line2D.new()
 	tracer.width = 3.0
 	tracer.default_color = Color(0.95, 0.45, 0.08)
