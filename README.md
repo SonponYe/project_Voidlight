@@ -412,7 +412,9 @@ VersusArena (Control, versus_manager.gd)
 | Asset | Source | License |
 |---|---|---|
 | Dungeon tiles, characters, items (`assets/sprites/dungeon/`) | [Kenney — Scribble Dungeons](https://kenney.nl/assets/scribble-dungeons) | CC0 |
-| Placeholder sprites (everything not yet reskinned — player/enemy silhouettes, powerup icons, etc.) | Built procedurally / flat shapes, no external asset | — |
+| Player characters (`assets/sprites/player/`) — Man Blue, Robot 1, Hitman 1, Man Brown, Soldier 1 | [Kenney — Top-down Shooter](https://kenney.nl/assets/top-down-shooter) | CC0 |
+| Touch-control pad, nub, buttons and icons (`assets/sprites/ui/mobile/`) — Style A | [Kenney — Mobile Controls](https://kenney.nl/assets/mobile-controls) | CC0 |
+| Placeholder sprites (everything not yet reskinned — enemy silhouettes, powerup icons, etc.; online players now use the Kenney characters above) | Built procedurally / flat shapes, no external asset | — |
 | Sound effects | [freesound.org](https://freesound.org) | Various (log each file) |
 | Ambient music | TBD | TBD |
 
