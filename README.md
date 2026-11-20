@@ -346,8 +346,10 @@ VersusArena (Control, versus_manager.gd)
 | `net_decoy.gd` *(`NetDecoy`)* | The online Decoy: host-simulated clone that paths through the maze (A* grid built in `net_arena.gd` from the Maze layout), hits on contact, takes damage from enemy shots, expires; clients just glide it to the replicated position |
 | `radial_picker.gd` *(`RadialPicker`)* | Reusable pop-out picker: a hub button that fans its options into a ring (tweened, overlays neighbouring UI). Used for Gen and Team selection in the online lobby |
 | `net_bomb.gd` *(`NetBomb`)* | A placed Bomb Voyage bomb: static marker carrying owner + trigger mode; the arena decides when it blows |
-| `net_map.gd` *(`NetMap`)* | The online map: parses the layout text (walls, cover, wrecks, barrels, decor, spawn markers), merges solids into the fewest rectangles with colliders and light occluders, exposes spawn positions, and bakes the look into a texture once |
-| `net_map_painter.gd` | Paints the ruins (ground, grime, damage, props) from a fixed seed inside a SubViewport that renders **once** — the same detail drawn every frame measured 1.8 fps on an Intel HD 520; baked it's 60+ |
+| `net_map.gd` *(`NetMap`)* | The online map: parses the layout text (walls, cover, wrecks, barrels, decor, spawn markers), merges solids into the fewest rectangles with colliders and light occluders, exposes spawn positions, and shows the pre-baked picture of the map (falls back to painting it at runtime if that picture is missing) |
+| `net_map_painter.gd` | Paints the ruins (ground, grime, damage, props) from a fixed seed. Used by the bake tool to make the shipped picture, and as a slow runtime fallback — painted at match start it froze the game for 8.5 s on an Intel HD 520 |
+| `scripts/tools/bake_map.tscn` | Developer tool: renders the map picture once into `assets/maps/` — run it windowed whenever the layout changes |
+| `walk_cycle.gd` *(`WalkCycle`)* | Procedural walk animation for the still character sprites — shoulder sway, step bob and squash, stepping boots, breathing, gun kick — driven by real movement so it plays identically for local, remote and Decoy characters |
 | `story.gd` *(`Story`)* | Reads `assets/story/story.json` and hands out the game's words with fallbacks; the host picks so everyone sees the same line |
 | `net_minimap.gd` | Corner minimap: layout always, players only if you're allowed to know where they are |
 | `net_hud.gd` | Online HUD: HP, alive count, Gen state + contextual hint, status line, timed announcements, the touch controls (incl. Gen and detonate buttons), Blackout night-vision tint, and the end-of-match overlay |
@@ -451,6 +453,9 @@ The original plan was a 3-month, 5-level solo horror game shipping by September 
 2. Clone or download this repository
 3. Open Godot → Import Project → select the `project.godot` file
 4. Press `F5` to run
+
+### Changing the online map
+The map is the `layout` text grid in `scenes/net/net_arena.tscn` (`#` wall, `c` cover, `v` wreck, `B` barrel, `S` free-for-all spawn, `1`/`2` team spawns, `k`/`d`/`x` decoration). Its look is a **pre-rendered picture** in `assets/maps/baked_<number>.webp`, named after a fingerprint of the layout. After editing the layout, run `godot --path . res://scripts/tools/bake_map.tscn` **windowed** (it needs a real renderer; takes a few seconds), then commit the new `.webp` and its `.import`. If you forget, the game still works — it paints the map itself at match start — but with a long freeze on weak graphics hardware, and it prints a warning.
 
 ### If a build shows black levels
 Two causes were found and fixed, but know the symptom: an exported game showing **no floor or walls**. (1) An `@export` `PackedStringArray` declared with a `= []` initializer loses its saved value in an export — never declare map data that way (`maze.gd` and `net_map.gd` don't). (2) The exporter caches converted scenes in `.godot/exported/`, which can serve a stale copy after a script change; if a fix doesn't seem to reach your build, close the editor, delete that folder (it's regenerated), and export again.
