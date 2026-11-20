@@ -135,23 +135,43 @@ func _add_body(center: Vector2, shape: Shape2D, polygon: PackedVector2Array) -> 
 # ---------------------------------------------------------------------------
 # Look
 # ---------------------------------------------------------------------------
-# The ruins are thousands of small shapes — far too many to redraw every frame
-# on modest graphics hardware (it measured under 2 fps). The map never changes,
-# so it is painted ONCE into a texture and shown as a single image.
+# The ruins are thousands of small shapes. Painted at runtime that froze the
+# game for ~8 seconds on modest graphics hardware (and, drawn every frame, ran
+# at under 2 fps), so the finished picture is rendered ONCE ahead of time by
+# scripts/tools/bake_map.gd and shipped as an image, named after a fingerprint
+# of the layout so it can never go stale. If the picture for the current
+# layout is missing, the map still paints itself at runtime — correct, but with
+# that freeze — and says so.
+
+const BAKED_DIR := "res://assets/maps/"
+
+## Kept so the bake tool can read the painted result back.
+var bake_viewport: SubViewport
+
+
+func baked_path() -> String:
+	return BAKED_DIR + "baked_%d.webp" % "\n".join(layout).hash()
+
 
 func _bake() -> void:
-	var painter := NetMapPainter.new()
-	painter.setup(bounds, _width, _height, blocks, barrels, _decor, _spawns)
-	var viewport := SubViewport.new()
-	viewport.size = Vector2i(bounds.size)
-	viewport.transparent_bg = false
-	viewport.disable_3d = true
-	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
-	viewport.add_child(painter)
-	add_child(viewport)
 	var picture := Sprite2D.new()
 	picture.centered = false
-	picture.texture = viewport.get_texture()
+	var path := baked_path()
+	if ResourceLoader.exists(path):
+		picture.texture = load(path)
+		add_child(picture)
+		return
+	push_warning("No pre-baked map picture at %s — painting at runtime (slow). Run the bake tool: scripts/tools/bake_map.tscn" % path)
+	var painter := NetMapPainter.new()
+	painter.setup(bounds, _width, _height, blocks, barrels, _decor, _spawns)
+	bake_viewport = SubViewport.new()
+	bake_viewport.size = Vector2i(bounds.size)
+	bake_viewport.transparent_bg = false
+	bake_viewport.disable_3d = true
+	bake_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	bake_viewport.add_child(painter)
+	add_child(bake_viewport)
+	picture.texture = bake_viewport.get_texture()
 	add_child(picture)
 
 
