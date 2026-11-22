@@ -55,6 +55,7 @@ const AMBIENT_DB := -17.0
 const RUMBLE_DB := -13.0
 const RUMBLE_EVERY := Vector2(22.0, 50.0)  # seconds between far-off thuds
 
+const LOBBY_DB_OFFSET := -7.0
 const DANGER_AMBIENT_RISE_DB := 5.0  # "just a little" louder when you're dying
 const HEART_DB := -9.0
 const DREAD_DB := -19.0
@@ -81,6 +82,7 @@ var _rumble: AudioStreamPlayer
 var _rumble_timer: Timer
 var _heart: AudioStreamPlayer
 var _dread: AudioStreamPlayer
+var _ambient_offset_db := 0.0
 var _danger := 0.0  # smoothed 0..1, see set_danger()
 var _danger_target := 0.0
 
@@ -215,9 +217,11 @@ func _stream(file: String) -> AudioStream:
 # The world: a quiet wind bed and the odd far-off thud
 # ---------------------------------------------------------------------------
 
-func start_ambient() -> void:
+## `quiet` is for the lobby: the same wind, lower, so the waiting room isn't dead silent.
+func start_ambient(quiet := false) -> void:
 	if _silent:
 		return
+	_ambient_offset_db = LOBBY_DB_OFFSET if quiet else 0.0
 	var bed := _stream(AMBIENT_FILE)
 	if bed is AudioStreamOggVorbis:
 		(bed as AudioStreamOggVorbis).loop = true
@@ -250,7 +254,7 @@ func _process(delta: float) -> void:
 	if _silent:
 		return
 	_danger = move_toward(_danger, _danger_target, delta * 0.8)  # eases in and out, never jumps
-	_ambient.volume_db = AMBIENT_DB + DANGER_AMBIENT_RISE_DB * _danger
+	_ambient.volume_db = AMBIENT_DB + _ambient_offset_db + DANGER_AMBIENT_RISE_DB * _danger
 	_run_loop(_heart, "heartbeat", _danger, HEART_DB, 0.9 + 0.5 * _danger)
 	_run_loop(_dread, "dread", _danger, DREAD_DB, 1.0)
 

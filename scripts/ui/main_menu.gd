@@ -10,6 +10,7 @@ extends Control
 
 
 func _ready() -> void:
+	Sfx.stop_ambient()
 	high_score_label.text = "High Score: %d" % Globals.high_score
 	if music.stream:
 		music.play()

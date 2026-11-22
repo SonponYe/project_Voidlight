@@ -132,6 +132,9 @@ var _was_shield := 0
 var _was_camouflaged := false
 var _was_haunting := 0
 var _was_ammo := START_AMMO
+## When this client fired (so it could play the gunshot at once instead of
+## waiting for the host's reply). Each is spent on the matching reply.
+var _predicted_shots: Array[float] = []
 var _was_gen := ""
 var _was_spare := ""
 var _use_sprite := false
@@ -155,7 +158,7 @@ func _ready() -> void:
 	hp = max_hp
 	_last_hp = max_hp
 	_was_gen = gen
-	_register_keys()
+	register_keys()
 	net_pos = position
 	net_rot = rotation
 	add_to_group("net_player")
@@ -300,6 +303,18 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+## True if this reply is for a shot we already played the sound for. A shot the
+## host refused (too soon, out of ammo) never gets a reply, so old ones expire.
+func _spend_predicted_shot() -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	while not _predicted_shots.is_empty() and now - _predicted_shots[0] > 1.5:
+		_predicted_shots.pop_front()
+	if _predicted_shots.is_empty():
+		return false
+	_predicted_shots.pop_front()
+	return true
+
+
 ## Sounds for things that just changed, on every peer, read from the replicated
 ## state — so nothing extra has to be sent over the network. Things that give
 ## nothing away to others (your own Gens switching on) are heard only by you;
@@ -431,6 +446,8 @@ func _local_update(delta: float) -> void:
 		elif multiplayer.is_server():
 			_server_shoot(_aim)
 		else:
+			_predicted_shots.append(Time.get_ticks_msec() / 1000.0)
+			Sfx.play_at("shot", global_position)  # no waiting for the round trip
 			_request_shoot.rpc_id(1, _aim)
 
 	if not _hud_blocks():
@@ -469,7 +486,7 @@ func _misc_input() -> void:
 		_send_gen(GenAction.DROP_AMMO)
 
 
-static func _register_keys() -> void:
+static func register_keys() -> void:
 	for action: String in EXTRA_KEYS:
 		if InputMap.has_action(action):
 			continue
@@ -771,7 +788,8 @@ func _burst(at: Vector2, radius: float, color: Color, life: float) -> void:
 func _shot_fx(from: Vector2, to: Vector2) -> void:
 	reveal_timer = REVEAL_ON_SHOT
 	walk.kick()
-	Sfx.play_at("shot", from)
+	if not (_is_mine() and _spend_predicted_shot()):
+		Sfx.play_at("shot", from)
 	if from.distance_to(to) < shoot_range - 2.0:  # it hit something, not just ran out of range
 		Sfx.play_at("impact", to)
 	var along := (to - from).normalized()

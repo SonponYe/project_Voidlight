@@ -28,6 +28,9 @@ const EXPLOSION_COLOR := Color(1.0, 0.6, 0.2, 0.8)
 ## direction — no cone. The caster keeps the normal rule.
 const BLACKOUT_VISION_RADIUS := 70.0
 const BLACKOUT_COLOR := Color(0.06, 0.06, 0.08)
+## What a Blackout caster's world is tinted: a clear, slightly lifted green, like
+## night goggles. It multiplies the picture, so it only has to favour green.
+const NIGHT_VISION_COLOR := Color(0.62, 1.12, 0.7)
 
 ## How long a dropped player's dimmed avatar stays in the match before the
 ## host eliminates it. Short outages are really just lag and never get here.
@@ -58,9 +61,11 @@ var _bomb_seq := 0
 var _decoy_seq := 0
 var _astar := AStarGrid2D.new()
 
-## Peer id of the active Blackout caster, 0 when the lights are on.
-## Broadcast by the server via _set_blackout.
-var blackout_by := 0
+## Peer ids of everyone whose Blackout is running right now (empty = lights on).
+## Several can overlap, each on its own timer: the arena stays dark for everyone
+## who ISN'T a caster, and each caster keeps their own night vision until their
+## own Blackout ends. Broadcast by the server via _set_blackouts.
+var blackout_casters := PackedInt32Array()
 
 
 func _ready() -> void:
@@ -91,7 +96,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	Sfx.stop_ambient()
+	Sfx.set_danger(0.0)  # the lobby keeps the wind going, but not a dying man's heartbeat
 	if Network.disconnected_from_server.is_connected(_on_lost_server):
 		Network.disconnected_from_server.disconnect(_on_lost_server)
 
@@ -225,7 +230,7 @@ func _on_peer_disconnected(id: int) -> void:
 	var who := _name_of(id)
 	# Left on purpose, never really started, or already out: remove outright.
 	if left_on_purpose or not _match_started or node.dead:
-		if node.gen == "blackout" and blackout_by == id:
+		if node.gen == "blackout" and blackout_casters.has(id):
 			end_blackout(id)
 		node.queue_free()
 		if _match_started:
@@ -277,32 +282,50 @@ func _check_win() -> void:
 # Blackout (host decides, everyone renders)
 # ---------------------------------------------------------------------------
 
+## Adding a caster changes nothing for the others already casting: their view and
+## their timers carry on untouched.
 func begin_blackout(caster_id: int) -> void:
-	_set_blackout.rpc(caster_id)
+	if blackout_casters.has(caster_id):
+		return
+	var next := blackout_casters.duplicate()
+	next.append(caster_id)
+	_set_blackouts.rpc(next)
 
 
 func end_blackout(caster_id: int) -> void:
-	if blackout_by == caster_id:
-		_set_blackout.rpc(0)
+	if not blackout_casters.has(caster_id):
+		return
+	var next := blackout_casters.duplicate()
+	next.remove_at(next.find(caster_id))
+	_set_blackouts.rpc(next)
 
 
 @rpc("authority", "call_local", "reliable")
-func _set_blackout(caster_id: int) -> void:
-	if caster_id != 0:
+func _set_blackouts(casters: PackedInt32Array) -> void:
+	var me := multiplayer.get_unique_id() if Network.has_peer() else 0
+	if blackout_casters.is_empty() and not casters.is_empty():
 		Sfx.play("blackout_on")  # everyone hears the lights go out
-	elif blackout_by != 0:
+	elif not blackout_casters.is_empty() and casters.is_empty():
 		Sfx.play("blackout_off")
-	blackout_by = caster_id
+	elif casters.has(me) != blackout_casters.has(me):
+		Sfx.play("blackout_on" if casters.has(me) else "blackout_off")  # your own goggles on / off
+	blackout_casters = casters
 
 
+func _is_caster(me: NetPlayer) -> bool:
+	return me != null and blackout_casters.has(me.owner_peer_id)
+
+
+## Dark for everyone who isn't casting (spectators, the dead, see normally).
 func _is_blind(me: NetPlayer) -> bool:
-	return blackout_by != 0 and me != null and not me.dead and me.owner_peer_id != blackout_by
+	return not blackout_casters.is_empty() and me != null and not me.dead and not _is_caster(me)
 
 
 func _update_blackout_visuals(me: NetPlayer) -> void:
 	var blind := _is_blind(me)
-	world_modulate.color = BLACKOUT_COLOR if blind else Color.WHITE
-	hud.set_night_vision(blackout_by != 0 and me != null and me.owner_peer_id == blackout_by)
+	var goggles := _is_caster(me) and not me.dead
+	world_modulate.color = BLACKOUT_COLOR if blind else (NIGHT_VISION_COLOR if goggles else Color.WHITE)
+	hud.set_night_vision(goggles)
 	for p in players_root.get_children():
 		if p is NetPlayer:
 			p.glow.enabled = blind and p == me

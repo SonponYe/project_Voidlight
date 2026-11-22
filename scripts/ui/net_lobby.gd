@@ -42,6 +42,8 @@ var _talk_timer := 0.0
 
 
 func _ready() -> void:
+	Sfx.set_danger(0.0)  # a heartbeat from the match you just left shouldn't follow you here
+	Sfx.start_ambient(true)  # quiet wind in the waiting room
 	name_edit.text = Network.local_name
 	lore_label.text = Story.pick("lobby")
 	lore_label.visible = lore_label.text != ""

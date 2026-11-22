@@ -52,9 +52,13 @@ var _hp := 0
 var _max_hp := 1
 var _hp_shown := -1.0  # the bar's own value, which eases toward the real one
 var _low_overlay: TextureRect
+var _goggle_overlay: TextureRect
 var _ammo_label: Label
 var _spare_label: Label
 var _prompt_label: Label
+var _swap_button: Control
+var _take_button: Control
+var _drop_button: Control
 var _clock := 0.0
 
 
@@ -71,7 +75,9 @@ func _ready() -> void:
 	key_label.text = ""
 	hint_label.text = ""
 	_add_volume_row()
+	_add_controls_help()
 	_add_low_health_overlay()
+	_add_goggle_overlay()
 	_add_extra_labels()
 
 
@@ -148,6 +154,29 @@ func _add_extra_labels() -> void:
 	_prompt_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_outline(_prompt_label)
 	add_child(_prompt_label)
+	if DisplayServer.is_touchscreen_available():
+		NetPlayer.register_keys()  # the buttons press these actions
+		_swap_button = _touch_button("SWAP", "gen_swap", Rect2(-204, -216, 70, 70))
+		_take_button = _touch_button("TAKE", "pick_up", Rect2(-284, -216, 70, 70))
+		_drop_button = _touch_button("DROP\nAMMO", "drop_ammo", Rect2(-304, -104, 70, 70))
+		_swap_button.visible = false
+		_take_button.visible = false
+
+
+## A small labelled on-screen button anchored to the bottom-right corner, which
+## presses an input action just like its keyboard key does.
+func _touch_button(text: String, action: String, rect: Rect2) -> Control:
+	var button: Control = (load("res://scenes/ui/touch_shoot_button.tscn") as PackedScene).instantiate()
+	button.set("label_text", text)
+	button.set("action_name", action)
+	button.set("diameter", rect.size.x)
+	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	button.offset_left = rect.position.x
+	button.offset_top = rect.position.y
+	button.offset_right = rect.position.x + rect.size.x
+	button.offset_bottom = rect.position.y + rect.size.y
+	add_child(button)
+	return button
 
 
 func set_ammo(me: NetPlayer) -> void:
@@ -159,7 +188,36 @@ func set_ammo(me: NetPlayer) -> void:
 
 
 func set_prompt(text: String) -> void:
+	if _take_button != null:
+		# On a touchscreen the prompt names the buttons, not the keys, and the
+		# TAKE button only appears when there is something to take.
+		_take_button.visible = text.begins_with("[F]")
+		text = text.split("     [V]")[0].replace("[F] ", "Tap TAKE:  ").replace("(H)", "(DROP AMMO button)")
 	_prompt_label.text = text
+
+
+## Night-goggle edges: the picture falls away into dark green at the rim and is
+## clear in the middle, so the view reads as "through goggles" without hiding anything.
+func _add_goggle_overlay() -> void:
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.62, 1.0])
+	gradient.colors = PackedColorArray([Color(0.0, 0.08, 0.02, 0.0), Color(0.0, 0.08, 0.02, 0.0), Color(0.0, 0.07, 0.02, 0.85)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 256
+	texture.height = 256
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(1.0, 0.5)
+	_goggle_overlay = TextureRect.new()
+	_goggle_overlay.texture = texture
+	_goggle_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_goggle_overlay.stretch_mode = TextureRect.STRETCH_SCALE
+	_goggle_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_goggle_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_goggle_overlay.visible = false
+	add_child(_goggle_overlay)
+	move_child(_goggle_overlay, night_vision.get_index() + 1)
 
 
 ## 0 while healthy, rising from about 0.3 just under the threshold to 1 at no health.
@@ -183,6 +241,20 @@ func _process(delta: float) -> void:
 	_low_overlay.modulate.a = danger * (0.5 + 0.5 * beat)
 	hp_bar.modulate.a = 1.0 if danger == 0.0 else 0.6 + 0.4 * beat
 	Sfx.set_danger(danger)
+
+
+## A short reminder of the keys, in the pause menu. Touch players have buttons.
+func _add_controls_help() -> void:
+	if DisplayServer.is_touchscreen_available():
+		return
+	var help := Label.new()
+	help.text = "Move WASD  ·  aim mouse  ·  fire click\nQ use Gen  ·  E detonate bombs  ·  R swap Gens\nF take dropped Gen  ·  V replace Gen  ·  H drop ammo\nT mute mic  ·  Esc this menu"
+	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	help.add_theme_font_size_override("font_size", 12)
+	help.add_theme_color_override("font_color", Color(0.7, 0.74, 0.82, 0.9))
+	var box := pause_note.get_parent()
+	box.add_child(help)
+	box.move_child(help, pause_note.get_index() + 2)  # under the Sound row
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -255,6 +327,8 @@ func set_status(text: String) -> void:
 
 func set_night_vision(on: bool) -> void:
 	night_vision.visible = on
+	if _goggle_overlay != null:
+		_goggle_overlay.visible = on
 
 
 ## Messages stack and fade on their own, so several can be read at once.
@@ -281,8 +355,12 @@ func set_gen(me: NetPlayer) -> void:
 		key_label.text = ""
 		hint_label.text = ""
 		_spare_label.text = ""
+		if _swap_button != null:
+			_swap_button.visible = false
 		return
 	_spare_label.text = _spare_text(me)
+	if _swap_button != null:
+		_swap_button.visible = me.spare_gen != ""
 	var def := Gens.def(me.gen)
 	gen_label.text = Gens.label(me.gen)
 	detonate_button.visible = me.gen == "bomb_voyage" and DisplayServer.is_touchscreen_available()

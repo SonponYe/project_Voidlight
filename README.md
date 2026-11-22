@@ -107,7 +107,7 @@ The online versions live in `scripts/net/gens.gd` (`Gens.DEFS`) and `net_player.
 | **Shield** *(renamed from Bulwark)* | A 360° shield around the player, lasting up to **30 seconds**, that degrades as it absorbs incoming damage and breaks/drops once it's taken enough | ✅ Built — soaks 4 hits (bombs count as 3), the breaking hit is fully absorbed, visible ring fades with remaining strength, 25s cooldown |
 | **Decoy** | Spawns an AI clone that locks onto and hunts one specific opposing player | ✅ Built in local Versus · ✅ Online: a clone wearing the caster's color and name tag (enemies can't tell it from a player; the caster and team see a faint ring) hunts the nearest enemy through the maze via grid pathfinding, deals 20 damage per 0.8s on contact, has 3 HP, dies to any enemy's shots, and expires after 20s; 25s cooldown |
 | **Poltergeist** *(renamed from Heavy Gunner)* | Tags one enemy player with a tracking mark — for the Gen's duration, the caster can always see that tagged player's position, piercing the normal limited-vision rule | ✅ Built — haunts the nearest living enemy for 20s, caster sees them anywhere with a purple marker, 25s cooldown |
-| **Blackout** | Darkens the whole arena for everyone *except* the caster for **30 seconds** — the caster alone gets a **night-vision view** of the dark arena | ✅ Built — everyone else gets a near-black world with only a small personal glow (walls cast real shadows) and their vision shrinks to 70px with no cone; the caster keeps normal vision under a green night-vision tint; 40s cooldown |
+| **Blackout** | Darkens the whole arena for everyone *except* the caster for **30 seconds** — the caster alone gets a **night-vision view** of the dark arena | ✅ Built — everyone who isn't casting gets a near-black world with only a small personal glow (walls cast real shadows) and their vision shrinks to 70px with no cone; each caster keeps normal vision through a clear green night-goggle view (tinted world, soft dark-green edges). **Blackouts overlap safely:** if a second player casts during yours, your view and your countdown are untouched; they stay in the dark until they cast, then get their own goggles on their own timer. The world stays dark until the last Blackout ends; 40s cooldown |
 | **Bomb Voyage** | Drop up to **5 bombs**. Each bomb is set, per-drop, to one of two trigger modes: **proximity** (auto-detonates when an enemy player gets close enough) or **manual** (caster detonates it on command). The caster can always see their own dropped bombs' locations on the map, regardless of range — enemies never see them | ✅ Built — tap Q: proximity (48px trigger), hold Q: manual, E: detonate all manual bombs; 90px blast for 60 damage (three shots' worth), hits the owner too; 1s between drops |
 
 ### Health, ammo, medical stations and what the dead leave behind (online)
@@ -118,7 +118,7 @@ The online versions live in `scripts/net/gens.gd` (`Gens.DEFS`) and `net_player.
 - **When someone dies** they leave their remaining ammo and each Gen they carried on the floor. A dropped Gen shows as a glowing orb with its name (and on the minimap). Walk up and press **F**: it becomes your **second Gen** if you have a free slot; with both slots full it replaces the active one, which is left on the floor in its place. **V** always replaces the active Gen. You can't take one you already carry. Dropped items vanish after 90s.
 - **Two Gens:** **R** swaps the active and the spare one (not while the active one is running). The spare keeps recharging in the background; the Gen card shows it. A new Gen starts ready.
 - Crates and stations are placed from a fixed seed, so the map is the same every match. The numbers (rounds, heal amount, timers) are first guesses and live as constants at the top of `net_pickups.gd` and `net_player.gd`.
-- Not built yet: on-screen touch buttons for swap / take / drop (keyboard only for now).
+- **Touch:** on a touchscreen the pause-menu key list is replaced by buttons — SWAP (shown only with a spare Gen), TAKE (shown only next to a dropped Gen) and DROP AMMO. Replacing your active Gen without a free slot (V) is keyboard-only. The buttons are built but untested on a real phone.
 
 ### Gen selection
 **Online:** each player picks their Gen in the waiting room (buttons built from `Gens.DEFS`, a one-line blurb for the selected one); the choice syncs to everyone's roster and locks when the host starts the match. **Local Versus:** the pre-match lobby reachable from the **Versus** button picks from the older local effect table, plus an FFA/Team toggle — Team is disabled there since local 2-player can't represent 2–3-per-team. Both are deliberately just the *selection logic*: plain buttons with a simple highlight, not the "press something, a ring of options pops out" visual that's planned as a separate pass.
@@ -227,7 +227,7 @@ The online game's sounds come from the `Sfx` autoload (`scripts/autoload/sfx.gd`
 | Interface | a click on every button in the game (confirm / back variants by button name) |
 | The world | a quiet looping wind bed, and a far-off thud every 20–50 seconds |
 
-A camouflaged player makes no footsteps. A **Sound** slider in the in-match menu (Esc) sets the volume and is remembered. A dedicated (headless) server skips all of it.
+A camouflaged player makes no footsteps. Your own gunshot plays the instant you click (it isn't kept waiting for the host's reply on a slow connection; the host's reply is then silent for that shot). The waiting room has the same wind, quieter. The **Esc** menu also lists the keys. A **Sound** slider in the in-match menu (Esc) sets the volume and is remembered. A dedicated (headless) server skips all of it.
 
 The game's sounds are layered, pitched and filtered from the CC0 packs by `tools/build_sfx.py` (needs `pip install numpy soundfile` and the packs' zips in the project root; the finished `.ogg` files are committed, so nobody needs either just to play). To change how something sounds, edit its recipe there and re-run it, or change the file names / volumes in the `SOUNDS` table at the top of `sfx.gd`. A name with a missing file is simply silent.
 
@@ -434,7 +434,8 @@ VersusArena (Control, versus_manager.gd)
 - [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
 - [ ] Input rebinding menu
 - [x] Online sound effects (shots, hits, deaths, every Gen, bombs, footsteps, UI clicks, match start/end, wind + distant thuds, volume slider) — **wired and verified to trigger, but not listened to by me: how each one actually sounds is untested**; swapping a sound is a one-line change (see "Online sound")
-- [ ] Music, and sound for the solo / local-versus modes (only the online game has the new sounds)
+- [x] Sound for solo and local versus (shot, hurt, death, pickups, power-ups, monster growl / stinger / footsteps / hit / death, bullet impacts, fireplace, wind, win / game over) from the same set via `Sfx.fill` — wired and verified to trigger, **not listened to**
+- [ ] Music (decided: none during matches — it would mask footsteps and voices)
 - [ ] Final art (the online map and players are real art now; everything else is placeholder shapes)
 - [x] HTML5 / Windows export presets + one-click `export_windows.bat` / `export_web.bat`
 - [ ] Itch.io page
@@ -450,7 +451,7 @@ VersusArena (Control, versus_manager.gd)
 | Player characters (`assets/sprites/player/`) — Man Blue, Robot 1, Hitman 1, Man Brown, Soldier 1 | [Kenney — Top-down Shooter](https://kenney.nl/assets/top-down-shooter) | CC0 |
 | Touch-control pad, nub, buttons and icons (`assets/sprites/ui/mobile/`) — Style A | [Kenney — Mobile Controls](https://kenney.nl/assets/mobile-controls) | CC0 |
 | Placeholder sprites (everything not yet reskinned — enemy silhouettes, powerup icons, etc.; online players now use the Kenney characters above) | Built procedurally / flat shapes, no external asset | — |
-| Online sound effects (`assets/audio/sfx/`, built by `tools/build_sfx.py`) — samples from "100 CC0 SFX", "80 CC0 RPG SFX", "80 CC0 creature SFX #2" and "SFX 100 v2" | CC0 sound packs from [OpenGameArt](https://opengameart.org) (the zips carry no credit file; each pack's page names its author, to be added here) | CC0 |
+| Sound effects (`assets/audio/sfx/`, built by `tools/build_sfx.py`) — samples from "100 CC0 SFX", "80 CC0 RPG SFX", "80 CC0 creature SFX #2" and "SFX 100 v2" | CC0 sound packs on [OpenGameArt](https://opengameart.org). The creature packs are confirmed as **rubberduck**'s ([80 CC0 creature SFX](https://opengameart.org/content/80-cc0-creature-sfx), [#2](https://opengameart.org/content/80-cc0-creture-sfx-2)); the other two are probably the same author (they sit in his collection) but I couldn't confirm it — check each pack's page and correct this line. The heartbeat and low drone are generated by the build script, not sampled | CC0 |
 | Any other sound effects | [freesound.org](https://freesound.org) | Various (log each file) |
 | Ambient music | TBD | TBD |
 
