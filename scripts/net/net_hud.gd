@@ -42,8 +42,17 @@ const GEN_COOLDOWN := Color(0.5, 0.55, 0.66)
 @onready var pause_note: Label = $PauseMenu/Panel/VBox/PauseNote
 @onready var leave_match_button: Button = $PauseMenu/Panel/VBox/LeaveMatchButton
 
+## Below this share of full health you're "dying": the screen edges go red and
+## stay red, the heartbeat starts and the ambient sound swells (see _danger()).
+const LOW_HEALTH := 0.4
+
 var _last_hp := -1
 var _confirm_leave := false
+var _hp := 0
+var _max_hp := 1
+var _hp_shown := -1.0  # the bar's own value, which eases toward the real one
+var _low_overlay: TextureRect
+var _clock := 0.0
 
 
 func _ready() -> void:
@@ -59,6 +68,7 @@ func _ready() -> void:
 	key_label.text = ""
 	hint_label.text = ""
 	_add_volume_row()
+	_add_low_health_overlay()
 
 
 ## A "Sound" slider in the pause menu, so anyone can turn the game down without
@@ -83,6 +93,53 @@ func _add_volume_row() -> void:
 	row.add_child(slider)
 	box.add_child(row)
 	box.move_child(row, pause_note.get_index() + 1)
+
+
+## A red glow around the screen edges, drawn on top of the world but under the
+## text. It's built here rather than in the scene because it only needs a texture.
+func _add_low_health_overlay() -> void:
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.72, 1.0])
+	gradient.colors = PackedColorArray([Color(0.8, 0.02, 0.02, 0.0), Color(0.8, 0.02, 0.02, 0.0), Color(0.75, 0.02, 0.02, 0.95)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 256
+	texture.height = 256
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(1.0, 0.5)
+	_low_overlay = TextureRect.new()
+	_low_overlay.texture = texture
+	_low_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_low_overlay.stretch_mode = TextureRect.STRETCH_SCALE
+	_low_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_low_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_low_overlay.modulate.a = 0.0
+	add_child(_low_overlay)
+	move_child(_low_overlay, 1)  # just above the soft vignette, below everything else
+
+
+## 0 while healthy, rising from about 0.3 just under the threshold to 1 at no health.
+func _danger() -> float:
+	if _hp <= 0:
+		return 0.0
+	var ratio := float(_hp) / float(maxi(_max_hp, 1))
+	if ratio > LOW_HEALTH:
+		return 0.0
+	return 0.3 + 0.7 * (1.0 - ratio / LOW_HEALTH)
+
+
+func _process(delta: float) -> void:
+	_clock += delta
+	if _hp_shown >= 0.0:
+		# The bar slides down (or up, when healing) instead of jumping.
+		_hp_shown = move_toward(_hp_shown, float(_hp), delta * _max_hp * 0.9)
+		hp_bar.value = _hp_shown
+	var danger := _danger()
+	var beat := 0.5 + 0.5 * sin(_clock * TAU * (1.1 + 0.9 * danger))  # faster the closer to death
+	_low_overlay.modulate.a = danger * (0.5 + 0.5 * beat)
+	hp_bar.modulate.a = 1.0 if danger == 0.0 else 0.6 + 0.4 * beat
+	Sfx.set_danger(danger)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -115,11 +172,14 @@ func _set_fill(bar: ProgressBar, color: Color) -> void:
 # ---------------------------------------------------------------------------
 
 func set_hp(hp: int, max_hp: int) -> void:
+	_hp = hp
+	_max_hp = max_hp
+	if _hp_shown < 0.0:
+		_hp_shown = float(hp)
 	hp_bar.max_value = max_hp
-	hp_bar.value = hp
-	hp_text.text = "%d / %d" % [hp, max_hp]
+	hp_text.text = "%d" % hp
 	var ratio := float(hp) / float(maxi(max_hp, 1))
-	_set_fill(hp_bar, HP_GOOD if ratio > 0.6 else (HP_WARN if ratio > 0.3 else HP_BAD))
+	_set_fill(hp_bar, HP_GOOD if ratio > 0.6 else (HP_WARN if ratio > LOW_HEALTH else HP_BAD))
 	if _last_hp >= 0 and hp < _last_hp:
 		_flash_damage()
 	_last_hp = hp

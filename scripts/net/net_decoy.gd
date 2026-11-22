@@ -140,7 +140,7 @@ func _physics_process(delta: float) -> void:
 		_hit_cooldown -= delta
 		if _hit_cooldown <= 0.0 and global_position.distance_to(target.global_position) <= CONTACT_RANGE:
 			_hit_cooldown = CONTACT_COOLDOWN
-			target.apply_damage(1)
+			target.apply_damage(NetPlayer.SHOT_DAMAGE)
 	move_and_slide()
 	net_pos = position
 	net_rot = rotation

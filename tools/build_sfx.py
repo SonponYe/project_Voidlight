@@ -156,9 +156,44 @@ def build():
     # --- footsteps on rubble: dry steps, pitched to vary ---
     for i, (ref, p) in enumerate([("d:footstep_01", 1.0), ("d:footstep_02", 1.0), ("d:footstep_01", 0.88), ("d:footstep_02", 1.12)], 1):
         save("step_%d" % i, highpass(pitch(load(ref), p), 120), -6)
+    # --- pickups and low-health warnings ---
+    save("empty", mix((db(pitch(load("d:switch_01"), 0.7), 0), 0), (db(load("d:metal_hit_02"), -10), 0.01)), -6)
+    save("pickup", mix((load("b:item_gem_02"), 0), (db(load("d:items_01"), -8), 0.05)), -6)
+    save("heal", mix((load("b:item_gem_04"), 0), (db(pitch(load("b:spell_02"), 1.1), -4), 0.08)), -4)
+    save("gen_pickup", mix((load("b:item_gem_03"), 0), (db(load("b:spell_01"), -3), 0.06)), -4)
+    save_heartbeat("heartbeat")
+    save_dread("dread")
     # --- the world: a low wind bed that loops, and far-off thuds of artillery ---
     save_stereo_loop("ambient", "d:loop_ambient_04")
     save("rumble", fade(lowpass(pitch(load("d:thunder_01"), 0.8), 450), 0.6, 1.2), -4)
+
+
+def save_heartbeat(name):
+    """A synthesised two-beat heartbeat (lub-dub), exactly one loop long."""
+    length = 0.9
+    t = np.arange(int(length * SR)) / SR
+    out = np.zeros_like(t)
+    for start, amp in ((0.0, 1.0), (0.28, 0.7)):
+        u = np.clip(t - start, 0, None)
+        env = (1 - np.exp(-u / 0.004)) * np.exp(-u / 0.06) * (t >= start)
+        freq = 42 + 28 * np.exp(-u / 0.05)  # a thump that drops in pitch
+        out += amp * env * np.sin(2 * np.pi * np.cumsum(freq) / SR)
+    save(name, out, -3)
+
+
+def save_dread(name):
+    """A low, slowly pulsing drone, built so its end joins its start (every
+    frequency is a whole number of cycles in the 8 second loop)."""
+    length = 8.0
+    t = np.arange(int(length * SR)) / SR
+    out = np.zeros_like(t)
+    for freq, amp in ((55.0, 1.0), (55.5, 0.7), (82.5, 0.35), (110.25, 0.2), (164.75, 0.08)):
+        out += amp * np.sin(2 * np.pi * freq * t)
+    out *= 0.65 + 0.35 * np.sin(2 * np.pi * 0.25 * t)
+    peak = 10 ** (-6 / 20) / np.abs(out).max()
+    os.makedirs(OUT, exist_ok=True)
+    sf.write(os.path.join(OUT, name + ".ogg"), out * peak, SR, format="OGG", subtype="VORBIS")
+    print("%-14s %.2fs (loops)" % (name, length))
 
 
 def save_stereo_loop(name, ref):

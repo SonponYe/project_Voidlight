@@ -20,7 +20,7 @@ const READY_TIMEOUT_SEC := 8.0
 
 const BOMB_TRIGGER_RADIUS := 48.0
 const BOMB_BLAST_RADIUS := 90.0
-const BOMB_DAMAGE := 3
+const BOMB_DAMAGE := 60  # three shots' worth
 const EXPLOSION_LIFETIME := 0.35
 const EXPLOSION_COLOR := Color(1.0, 0.6, 0.2, 0.8)
 

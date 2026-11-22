@@ -49,6 +49,10 @@ const AMBIENT_DB := -17.0
 const RUMBLE_DB := -13.0
 const RUMBLE_EVERY := Vector2(22.0, 50.0)  # seconds between far-off thuds
 
+const DANGER_AMBIENT_RISE_DB := 5.0  # "just a little" louder when you're dying
+const HEART_DB := -9.0
+const DREAD_DB := -19.0
+
 const POOL_2D := 20
 const POOL_FLAT := 8
 ## The same sound is not restarted more often than this (seconds), so a burst of
@@ -69,6 +73,10 @@ var _silent := false
 var _ambient: AudioStreamPlayer
 var _rumble: AudioStreamPlayer
 var _rumble_timer: Timer
+var _heart: AudioStreamPlayer
+var _dread: AudioStreamPlayer
+var _danger := 0.0  # smoothed 0..1, see set_danger()
+var _danger_target := 0.0
 
 
 func _ready() -> void:
@@ -103,6 +111,14 @@ func _ready() -> void:
 	_rumble.bus = BUS
 	_rumble.volume_db = RUMBLE_DB
 	add_child(_rumble)
+	_heart = AudioStreamPlayer.new()
+	_heart.bus = BUS
+	_heart.volume_db = -60.0
+	add_child(_heart)
+	_dread = AudioStreamPlayer.new()
+	_dread.bus = BUS
+	_dread.volume_db = -60.0
+	add_child(_dread)
 	_rumble_timer = Timer.new()
 	_rumble_timer.one_shot = true
 	_rumble_timer.timeout.connect(_on_rumble_timer)
@@ -193,9 +209,47 @@ func start_ambient() -> void:
 func stop_ambient() -> void:
 	if _silent:
 		return
+	_danger = 0.0
+	_danger_target = 0.0
+	_ambient.volume_db = AMBIENT_DB
+	_heart.stop()
+	_dread.stop()
 	_ambient.stop()
 	_rumble.stop()
 	_rumble_timer.stop()
+
+
+## How close the local player is to dying, 0..1. The ambient bed swells a little,
+## a low drone fades in and a heartbeat starts (faster the closer to death).
+func set_danger(level: float) -> void:
+	_danger_target = clampf(level, 0.0, 1.0)
+
+
+func _process(delta: float) -> void:
+	if _silent:
+		return
+	_danger = move_toward(_danger, _danger_target, delta * 0.8)  # eases in and out, never jumps
+	_ambient.volume_db = AMBIENT_DB + DANGER_AMBIENT_RISE_DB * _danger
+	_run_loop(_heart, "heartbeat", _danger, HEART_DB, 0.9 + 0.5 * _danger)
+	_run_loop(_dread, "dread", _danger, DREAD_DB, 1.0)
+
+
+## Fades a looping layer in with `amount` (0..1), starting or stopping it as needed.
+func _run_loop(player: AudioStreamPlayer, file: String, amount: float, loud_db: float, pitch: float) -> void:
+	if amount <= 0.001:
+		if player.playing:
+			player.stop()
+		return
+	if not player.playing:
+		var stream := _stream(file)
+		if stream == null:
+			return
+		if stream is AudioStreamOggVorbis:
+			(stream as AudioStreamOggVorbis).loop = true
+		player.stream = stream
+		player.play()
+	player.volume_db = lerpf(-45.0, loud_db, amount)
+	player.pitch_scale = pitch
 
 
 func _on_rumble_timer() -> void:

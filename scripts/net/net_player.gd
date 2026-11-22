@@ -26,6 +26,7 @@ const COLORS := [
 ]
 const TEAM_COLORS := {1: Color(0.35, 0.6, 1.0), 2: Color(0.95, 0.4, 0.3)}
 const AIM_SEND_INTERVAL := 0.05
+const SHOT_DAMAGE := 20
 const TRACER_LIFETIME := 0.12
 
 ## Vision rule (see net_arena.gd): enemies inside VISION_RADIUS are seen in
@@ -66,7 +67,9 @@ const STILL_GRACE := 0.25
 const CORRECT_RATE := 6.0
 
 @export var speed := 160.0
-@export var max_hp := 5
+## Health is out of 100 and a hit takes a fixed chunk, so the bar just counts down
+## the remainder: five shots from full.
+@export var max_hp := 100
 @export var shoot_range := 400.0
 @export var fire_cooldown := 0.3
 
@@ -488,7 +491,7 @@ func _server_shoot(aim: float) -> void:
 	if result:
 		hit_point = result.position
 		if result.collider is NetPlayer and is_enemy(result.collider):
-			(result.collider as NetPlayer).apply_damage(1)
+			(result.collider as NetPlayer).apply_damage(SHOT_DAMAGE)
 		elif result.collider is NetDecoy and (result.collider as NetDecoy).is_enemy_of(self):
 			(result.collider as NetDecoy).apply_damage(1)
 	_shot_fx.rpc(from, hit_point)
@@ -653,7 +656,8 @@ func apply_damage(amount: int) -> void:
 	if dead:
 		return
 	if shield_hp > 0:
-		shield_hp -= amount
+		# The shield counts in hits, not health: a shot is one hit, a bomb blast three.
+		shield_hp -= maxi(1, ceili(float(amount) / SHOT_DAMAGE))
 		if shield_hp <= 0:
 			_end_gen()
 		return
