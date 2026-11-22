@@ -24,6 +24,7 @@ const LEAN := 1.8  # pixels the torso pushes forward while running
 const SHOULDER_TREMOR := 0.03  # radians (under 2 degrees) of shoulder turn per step
 const STEP_BOB := 0.012  # a barely-there rise on each footfall
 const RECOIL_TIME := 0.09
+const FOOTFALL_DISTANCE := 54.0  # pixels between audible footsteps (about 3 a second at full speed)
 
 ## Where in the step cycle we are (radians) and how "running" we are (0..1,
 ## eased so starting and stopping blend instead of snapping).
@@ -32,6 +33,7 @@ var moving := 0.0
 
 var _recoil := 0.0
 var _time := 0.0
+var _since_step := 0.0
 var _last := Vector2.INF
 var _dir := Vector2.ZERO  # direction of travel, in the character's own frame
 
@@ -48,8 +50,21 @@ func tick(delta: float, pos: Vector2, rot: float) -> void:
 		var local := step.rotated(-rot).normalized()
 		_dir = local if _dir == Vector2.ZERO else _dir.lerp(local, clampf(delta * 14.0, 0.0, 1.0)).normalized()
 		phase += speed * delta / STRIDE * TAU
+		_since_step += speed * delta
+	else:
+		_since_step = FOOTFALL_DISTANCE * 0.5  # the first step after stopping comes a half-stride in
 	moving = move_toward(moving, 1.0 if walking else 0.0, delta * 12.0)  # quick on, quick off
 	_recoil = maxf(0.0, _recoil - delta)
+
+
+## True once each time the character has covered another footstep's worth of
+## ground (call it every frame after tick()). Separate from the drawn stride,
+## which is much shorter — the legs swing fast, but boots only land ~3 times a second.
+func footfall() -> bool:
+	if _since_step < FOOTFALL_DISTANCE:
+		return false
+	_since_step -= FOOTFALL_DISTANCE
+	return true
 
 
 ## A shot was fired: the body is pushed back a touch, then recovers.

@@ -58,6 +58,31 @@ func _ready() -> void:
 	gen_label.text = ""
 	key_label.text = ""
 	hint_label.text = ""
+	_add_volume_row()
+
+
+## A "Sound" slider in the pause menu, so anyone can turn the game down without
+## leaving the match. The setting is remembered between sessions.
+func _add_volume_row() -> void:
+	var box := pause_note.get_parent()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var label := Label.new()
+	label.text = "Sound"
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = Sfx.volume
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	slider.custom_minimum_size = Vector2(0, 24)
+	slider.value_changed.connect(Sfx.set_volume)
+	slider.drag_ended.connect(func(_changed: bool) -> void: Sfx.play("ui_click"))  # lets you hear the new level
+	row.add_child(label)
+	row.add_child(slider)
+	box.add_child(row)
+	box.move_child(row, pause_note.get_index() + 1)
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -77,6 +77,7 @@ func _ready() -> void:
 	hud.return_pressed.connect(_on_return_pressed)
 	hud.leave_pressed.connect(_on_leave_pressed)
 	Network.disconnected_from_server.connect(_on_lost_server)
+	Sfx.start_ambient()
 
 	if Network.is_host():
 		multiplayer.peer_disconnected.connect(_on_peer_disconnected)
@@ -88,6 +89,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	Sfx.stop_ambient()
 	if Network.disconnected_from_server.is_connected(_on_lost_server):
 		Network.disconnected_from_server.disconnect(_on_lost_server)
 
@@ -279,6 +281,10 @@ func end_blackout(caster_id: int) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func _set_blackout(caster_id: int) -> void:
+	if caster_id != 0:
+		Sfx.play("blackout_on")  # everyone hears the lights go out
+	elif blackout_by != 0:
+		Sfx.play("blackout_off")
 	blackout_by = caster_id
 
 
@@ -316,6 +322,8 @@ func _spawn_bomb(data: Dictionary) -> Node:
 	bomb.team = data["team"]
 	bomb.manual = data["manual"]
 	bomb.position = data["pos"]
+	if _is_local_id(data["owner"]):
+		Sfx.play("bomb_place")  # only its owner hears it go down
 	return bomb
 
 
@@ -381,6 +389,8 @@ func _spawn_decoy(data: Dictionary) -> Node:
 	decoy.lifespan = data["life"]
 	decoy.position = data["pos"]
 	decoy.configure_replication()
+	if _is_local_id(data["owner"]):
+		Sfx.play("decoy")  # the caster hears it; enemies just see "another player"
 	return decoy
 
 
@@ -419,6 +429,7 @@ func _explode(bomb: NetBomb) -> void:
 
 @rpc("authority", "call_local", "unreliable")
 func _explosion_fx(pos: Vector2) -> void:
+	Sfx.play_at("explosion", pos)
 	var points := PackedVector2Array()
 	for i in 24:
 		points.append(pos + Vector2.RIGHT.rotated(TAU * i / 24.0) * BOMB_BLAST_RADIUS)
@@ -488,6 +499,7 @@ func _can_see(me: NetPlayer, other: Node2D) -> bool:
 @rpc("authority", "call_local", "reliable")
 func _set_status(text: String) -> void:
 	hud.set_status(text)
+	Sfx.play("start")  # the host only sends this when the fight begins
 
 
 @rpc("authority", "call_local", "reliable")
@@ -498,12 +510,32 @@ func _announce(text: String) -> void:
 @rpc("authority", "call_local", "reliable")
 func _show_results(text: String, flavor: String) -> void:
 	_match_over = true
+	Sfx.play("win" if _local_side_won() else "defeat")
 	hud.show_results(text, Network.is_leader(), flavor)
 
 
 # ---------------------------------------------------------------------------
 # HUD / leaving
 # ---------------------------------------------------------------------------
+
+func _is_local_id(id: int) -> bool:
+	return Network.has_peer() and id == multiplayer.get_unique_id()
+
+
+## For the victory or defeat sound: still standing, or (team mode) a teammate is.
+func _local_side_won() -> bool:
+	var me := _local_player()
+	if me == null:
+		return false
+	if not me.dead:
+		return true
+	if me.team == 0:
+		return false
+	for child in players_root.get_children():
+		if child is NetPlayer and child.team == me.team and not child.dead:
+			return true
+	return false
+
 
 func _local_player() -> NetPlayer:
 	if not Network.has_peer():

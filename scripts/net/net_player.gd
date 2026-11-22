@@ -109,6 +109,11 @@ var _aim := 0.0
 var _last_sent_aim := 0.0
 var _last_hp := -1
 var _flash_time := 0.0
+# What the replicated state looked like last frame, to hear what just changed.
+var _was_dead := false
+var _was_shield := 0
+var _was_camouflaged := false
+var _was_haunting := 0
 var _use_sprite := false
 var walk := WalkCycle.new()
 var _aim_send_timer := 0.0
@@ -239,6 +244,7 @@ func _process(delta: float) -> void:
 	# A white flash on the body when hp drops, visible to everyone.
 	if _last_hp >= 0 and hp < _last_hp:
 		_flash_time = 0.14
+	_play_state_sounds()
 	_last_hp = hp
 	_flash_time = maxf(0.0, _flash_time - delta)
 	var flash := Color(2.4, 2.4, 2.4) if _flash_time > 0.0 else Color.WHITE
@@ -248,6 +254,9 @@ func _process(delta: float) -> void:
 		_smooth_remote(delta)
 	name_label.global_position = global_position + NAME_OFFSET  # pinned above, however they turn
 	walk.tick(delta, global_position, rotation)
+	# A disguised, dead or disconnected player makes no footsteps.
+	if walk.footfall() and not dead and not camouflaged and link_state != 2:
+		Sfx.step_at(global_position)
 	if _use_sprite:
 		walk.apply(body, SPRITE_SCALE)
 	disguise.rotation = -rotation
@@ -266,6 +275,34 @@ func _process(delta: float) -> void:
 	if dead and not collision.disabled:
 		collision.set_deferred("disabled", true)
 	queue_redraw()
+
+
+## Sounds for things that just changed, on every peer, read from the replicated
+## state — so nothing extra has to be sent over the network. Things that give
+## nothing away to others (your own Gens switching on) are heard only by you;
+## being hit, dying and a shield breaking are heard by everyone nearby.
+func _play_state_sounds() -> void:
+	var killed := dead and not _was_dead
+	if _last_hp >= 0 and hp < _last_hp and not killed:
+		if _is_mine():
+			Sfx.play("hurt_me")
+		else:
+			Sfx.play_at("hurt", global_position)
+	if killed:
+		Sfx.play_at("death", global_position)
+	if shield_hp < _was_shield:
+		Sfx.play_at("shield_break" if shield_hp <= 0 else "impact", global_position)
+	if _is_mine():
+		if shield_hp > 0 and _was_shield == 0:
+			Sfx.play("shield_on")
+		if camouflaged != _was_camouflaged:
+			Sfx.play("camo_on" if camouflaged else "camo_off")
+		if poltergeist_target != 0 and _was_haunting == 0:
+			Sfx.play("haunt")
+	_was_dead = dead
+	_was_shield = shield_hp
+	_was_camouflaged = camouflaged
+	_was_haunting = poltergeist_target
 
 
 func _draw() -> void:
@@ -590,6 +627,9 @@ func _burst(at: Vector2, radius: float, color: Color, life: float) -> void:
 func _shot_fx(from: Vector2, to: Vector2) -> void:
 	reveal_timer = REVEAL_ON_SHOT
 	walk.kick()
+	Sfx.play_at("shot", from)
+	if from.distance_to(to) < shoot_range - 2.0:  # it hit something, not just ran out of range
+		Sfx.play_at("impact", to)
 	var along := (to - from).normalized()
 	_burst(from + along * 22.0, 8.0, Color(1.0, 0.95, 0.6), 0.09)  # muzzle flash
 	_burst(to, 8.0, Color(1.0, 0.55, 0.15), 0.16)  # where it landed

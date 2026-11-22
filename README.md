@@ -202,6 +202,21 @@ Every sound hook is wired and silent until an actual audio file is assigned (sam
 - Gunshot, muzzle flash (visual + brief point-light pulse), flashlight toggle click, wall-bump ("you just walked into something"), footsteps (volume naturally increases with proximity via positional audio, no extra code needed), growl while hunting, a one-shot "lock-on" stinger the instant an enemy spots you, a heartbeat loop at 1 HP, and an ambient drone that pitches up as the nearest monster closes in.
 - Gunshots alert nearby idle monsters within a radius.
 
+### Online sound
+The online game's sounds come from the `Sfx` autoload (`scripts/autoload/sfx.gd`) and the files in `assets/audio/sfx/`. `Sfx.play(name)` plays a sound the same everywhere (interface, your own Gens); `Sfx.play_at(name, position)` plays it *from* a spot — louder near, panned left/right, silent far away. Everything the game reacts to:
+
+| Heard by | Sounds |
+|---|---|
+| Everyone, from where it happened | gunshots, shots hitting a wall, someone being hit, someone dying, a shield breaking, bomb explosions, footsteps (short range, and a Decoy's footsteps sound exactly like a player's) |
+| Everyone | the lights going out / coming back (Blackout), match start, victory / defeat |
+| Only the player using it | Shield on, Camouflage on/off, Poltergeist, Decoy, placing a bomb, being hit (a heavier thump) — so Gens give nothing away |
+| Interface | a click on every button in the game (confirm / back variants by button name) |
+| The world | a quiet looping wind bed, and a far-off thud every 20–50 seconds |
+
+A camouflaged player makes no footsteps. A **Sound** slider in the in-match menu (Esc) sets the volume and is remembered. A dedicated (headless) server skips all of it.
+
+The game's sounds are layered, pitched and filtered from the CC0 packs by `tools/build_sfx.py` (needs `pip install numpy soundfile` and the packs' zips in the project root; the finished `.ogg` files are committed, so nobody needs either just to play). To change how something sounds, edit its recipe there and re-run it, or change the file names / volumes in the `SOUNDS` table at the top of `sfx.gd`. A name with a missing file is simply silent.
+
 ### Ammo & Health
 - Starting ammo: **12** (ammo pickups restore **6**)
 - Starting HP: **3** in Solo — Versus mode runs a higher pool (**6 HP / 16 ammo** per player) since a 3-HP duel ends on the first exchange
@@ -314,6 +329,7 @@ VersusArena (Control, versus_manager.gd)
 | Autoload | Purpose |
 |---|---|
 | `Globals.gd` | Cross-scene state: current level, score, high score, lighter charges. HP/ammo are now **per-player** (on `player.gd`), mirrored into `Globals.player_hp`/`ammo` for player 1 only so nothing else that reads them breaks. Also holds `POWER_DEFS` (the superpower duration/strength/cooldown table) and the lobby's selections (`match_mode`, `selected_power_p1`/`p2`). |
+| `Sfx` (`sfx.gd`) | Online-game sound effects: positional and flat playback, button clicks, ambient bed, volume setting (see "Online sound"). |
 | `BulletPool.gd` | Pre-instantiated bullet pool — no runtime instantiate/free. Also usable as a plain (non-autoload) node, which is exactly what `LocalBulletPool` does. |
 
 ### Key Scripts
@@ -402,7 +418,9 @@ VersusArena (Control, versus_manager.gd)
 - [x] Pop-out radial pickers for Gen and Team in the online lobby (placeholder styling)
 - [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
 - [ ] Input rebinding menu
-- [ ] Real art/sound assets (everything is placeholder shapes + silent hooks)
+- [x] Online sound effects (shots, hits, deaths, every Gen, bombs, footsteps, UI clicks, match start/end, wind + distant thuds, volume slider) — **wired and verified to trigger, but not listened to by me: how each one actually sounds is untested**; swapping a sound is a one-line change (see "Online sound")
+- [ ] Music, and sound for the solo / local-versus modes (only the online game has the new sounds)
+- [ ] Final art (the online map and players are real art now; everything else is placeholder shapes)
 - [x] HTML5 / Windows export presets + one-click `export_windows.bat` / `export_web.bat`
 - [ ] Itch.io page
 - [ ] Playtesting pass
@@ -417,7 +435,8 @@ VersusArena (Control, versus_manager.gd)
 | Player characters (`assets/sprites/player/`) — Man Blue, Robot 1, Hitman 1, Man Brown, Soldier 1 | [Kenney — Top-down Shooter](https://kenney.nl/assets/top-down-shooter) | CC0 |
 | Touch-control pad, nub, buttons and icons (`assets/sprites/ui/mobile/`) — Style A | [Kenney — Mobile Controls](https://kenney.nl/assets/mobile-controls) | CC0 |
 | Placeholder sprites (everything not yet reskinned — enemy silhouettes, powerup icons, etc.; online players now use the Kenney characters above) | Built procedurally / flat shapes, no external asset | — |
-| Sound effects | [freesound.org](https://freesound.org) | Various (log each file) |
+| Online sound effects (`assets/audio/sfx/`, built by `tools/build_sfx.py`) — samples from "100 CC0 SFX", "80 CC0 RPG SFX", "80 CC0 creature SFX #2" and "SFX 100 v2" | CC0 sound packs from [OpenGameArt](https://opengameart.org) (the zips carry no credit file; each pack's page names its author, to be added here) | CC0 |
+| Any other sound effects | [freesound.org](https://freesound.org) | Various (log each file) |
 | Ambient music | TBD | TBD |
 
 > **Rule:** Every asset used in Akira must be listed here with its license before the game ships. No exceptions.

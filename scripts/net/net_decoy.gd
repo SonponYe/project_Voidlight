@@ -96,6 +96,8 @@ func _process(delta: float) -> void:
 		return
 	name_label.global_position = global_position + NetPlayer.NAME_OFFSET
 	walk.tick(delta, global_position, rotation)
+	if walk.footfall() and not dead:
+		Sfx.step_at(global_position)  # sounds exactly like a player walking
 	if _use_sprite:
 		walk.apply(body, NetPlayer.SPRITE_SCALE)
 	queue_redraw()

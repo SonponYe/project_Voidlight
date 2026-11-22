@@ -30,6 +30,7 @@ driver/enable_input=true
 
 Globals="*res://scripts/autoload/globals.gd"
 BulletPool="*res://scripts/autoload/bullet_pool.gd"
+Sfx="*res://scripts/autoload/sfx.gd"
 Network="*res://scripts/net/network_manager.gd"
 Voice="*res://scripts/net/voice_chat.gd"
 
