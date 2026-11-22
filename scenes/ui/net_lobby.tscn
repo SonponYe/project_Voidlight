@@ -261,9 +261,10 @@ theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
 theme_override_font_sizes/font_size = 13
 autowrap_mode = 2
 
-[node name="TeamRadial" type="Control" parent="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox"]
+[node name="ShuffleButton" type="Button" parent="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox"]
 visible = false
-script = ExtResource("2")
+custom_minimum_size = Vector2(0, 40)
+text = "Shuffle teams"
 
 [node name="FooterBox" type="VBoxContainer" parent="Main/RoomPanel"]
 theme_override_constants/separation = 6
@@ -300,6 +301,7 @@ horizontal_alignment = 1
 [connection signal="pressed" from="Main/ConnectPanel/BackButton" to="." method="_on_back_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow/FFAButton" to="." method="_on_ffa_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow/TeamButton" to="." method="_on_team_mode_pressed"]
+[connection signal="pressed" from="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ShuffleButton" to="." method="_on_shuffle_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/StartButton" to="." method="_on_start_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/MicButton" to="." method="_on_mic_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/LeaveButton" to="." method="_on_leave_pressed"]

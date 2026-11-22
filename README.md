@@ -375,7 +375,7 @@ VersusArena (Control, versus_manager.gd)
 | `voice_chat.gd` *(autoload: `Voice`)* | Voice chat: mic capture → 8 kHz µ-law → server → team/FFA/dead-aware routing → per-speaker playback. `recipients_for()` is the single rule table; `ingest_pcm()` is the same path the mic uses, so it can be driven by tests |
 | `net_pickups.gd` *(`NetPickups`)* / `net_pickup.gd` *(`NetPickup`)* | Everything on the arena floor: the host places ammo crates and medical stations from a fixed seed, runs pickup / healing / respawn rules and the drops a dead player leaves; a `MultiplayerSpawner` shows them to everyone, which only draw them (a station's progress ring is replicated) |
 | `net_decoy.gd` *(`NetDecoy`)* | The online Decoy: host-simulated clone that paths through the maze (A* grid built in `net_arena.gd` from the Maze layout), hits on contact, takes damage from enemy shots, expires; clients just glide it to the replicated position |
-| `radial_picker.gd` *(`RadialPicker`)* | Reusable pop-out picker: a hub button that fans its options into a ring (tweened, overlays neighbouring UI). Used for Gen and Team selection in the online lobby |
+| `radial_picker.gd` *(`RadialPicker`)* | Reusable pop-out picker: a hub button that fans its options into a ring (tweened, overlays neighbouring UI). Used for Gen selection in the online lobby |
 | `net_bomb.gd` *(`NetBomb`)* | A placed Bomb Voyage bomb: static marker carrying owner + trigger mode; the arena decides when it blows |
 | `net_map.gd` *(`NetMap`)* | The online map: parses the layout text (walls, cover, wrecks, barrels, decor, spawn markers), merges solids into the fewest rectangles with colliders and light occluders, exposes spawn positions, and shows the pre-baked picture of the map (falls back to painting it at runtime if that picture is missing) |
 | `net_map_painter.gd` | Paints the ruins (ground, grime, damage, props) from a fixed seed. Used by the bake tool to make the shipped picture, and as a slow runtime fallback — painted at match start it froze the game for 8.5 s on an Intel HD 520 |
@@ -419,7 +419,7 @@ VersusArena (Control, versus_manager.gd)
 - [ ] Gen balance pass — every number is a first guess until real matches happen
 - [x] Limited player vision online (ring + forward cone + line of sight, firing reveals you) — first-pass numbers, client-side
 - [x] Online Gens: Camouflage, Shield, Poltergeist, Blackout, Bomb Voyage — picked in the online lobby, server-authoritative, verified host + 2 clients
-- [x] Online team mode: host toggles FFA/Teams, auto-dealt A/B with switching, teammates always visible, no friendly fire, team spawns, last team standing wins — verified host + 2 clients
+- [x] Online team mode: host toggles FFA/Teams, teams dealt at random and balanced (sizes within one; leader can Shuffle; late joiners fill the smaller side; start is blocked if lopsided), teammates always visible, no friendly fire, team spawns, last team standing wins — verified host + 2 clients
 - [x] All six Gens online, including the Decoy port (clone + A* pathfinding on the Maze grid)
 - [x] Online movement smoothing: your own avatar reconciles against the host (snap only on real drift, ease together once stopped), others' avatars glide to the replicated position; verified over loopback only — real-latency behaviour needs the real-build test
 - [x] Laggy/dropped players stay in, dimmed: 3s of silence marks you lagging, a dropped connection leaves a dimmed killable avatar for a grace period, a deliberate Leave removes you at once
@@ -430,7 +430,7 @@ VersusArena (Control, versus_manager.gd)
 - [x] Room codes (an 8-character, checksummed encoding of the host's address — typos are rejected). **Not** a matchmaking service: there's no server to look rooms up on yet, so it's only as reachable as the address inside it
 - [ ] Real matchmaking (a room list / lookup on a hosted server) — needs the always-on server
 - [ ] Confirming the earlier intermittent WebSocket disconnect is gone — it did not appear in any of this session's three-process runs, but still needs a check on real exported builds
-- [x] Pop-out radial pickers for Gen and Team in the online lobby (placeholder styling)
+- [x] Pop-out radial picker for Gen in the online lobby (placeholder styling)
 - [ ] Gamepad aim (movement-direction fallback works, true analog aim doesn't exist)
 - [ ] Input rebinding menu
 - [x] Online sound effects (shots, hits, deaths, every Gen, bombs, footsteps, UI clicks, match start/end, wind + distant thuds, volume slider) — **wired and verified to trigger, but not listened to by me: how each one actually sounds is untested**; swapping a sound is a one-line change (see "Online sound")

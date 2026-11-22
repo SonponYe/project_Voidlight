@@ -224,12 +224,8 @@ func can_start() -> bool:
 	if match_in_progress or players.size() < 2:
 		return false
 	if is_team_mode():
-		var counts := {1: 0, 2: 0}
-		for id in players:
-			var t: int = players[id].get("team", 0)
-			if counts.has(t):
-				counts[t] += 1
-		return counts[1] > 0 and counts[2] > 0
+		var counts := _team_sizes()
+		return counts[1] > 0 and counts[2] > 0 and absi(counts[1] - counts[2]) <= 1
 	return true
 
 
@@ -401,20 +397,27 @@ func select_gen(key: String) -> void:
 		_select_gen.rpc_id(1, key)
 
 
-## Switch sides in team mode. Ignored in FFA or once a match is running.
-func select_team(team: int) -> void:
-	if not is_team_mode() or match_in_progress or team not in [1, 2]:
+## Leader only: deal everyone onto new random sides (team mode, before the match).
+func shuffle_teams() -> void:
+	if not is_team_mode() or match_in_progress:
 		return
 	if is_host():
-		if players.has(1):
-			players[1]["team"] = team
-			_broadcast_players()
-	elif is_connected_to_match():
-		_select_team.rpc_id(1, team)
+		_deal_teams()
+		_broadcast_players()
+	elif is_leader():
+		_shuffle_teams.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _shuffle_teams() -> void:
+	if is_host() and multiplayer.get_remote_sender_id() == leader_id() \
+			and is_team_mode() and not match_in_progress:
+		_deal_teams()
+		_broadcast_players()
 
 
 ## Leader only (the host re-checks). Switching to team mode deals everyone
-## onto alternating sides; switching back clears teams.
+## onto random, balanced sides; switching back clears teams.
 func set_match_mode(mode: String) -> void:
 	if mode not in ["ffa", "team"] or match_in_progress:
 		return
@@ -433,21 +436,56 @@ func _set_mode(mode: String) -> void:
 
 func _apply_mode(mode: String) -> void:
 	match_mode = mode
-	var ids := players.keys()
-	ids.sort()
-	for i in ids.size():
-		players[ids[i]]["team"] = (i % 2) + 1 if mode == "team" else 0
+	if mode == "team":
+		_deal_teams()
+	else:
+		for id in players:
+			players[id]["team"] = 0
 	_broadcast_players()
 
 
-## Host only: the side with fewer players, for late joiners.
-func _smaller_team() -> int:
+## Host only: everyone onto a random side, sizes differing by at most one
+## (4 -> 2/2, 5 -> 3/2 with a random side getting the extra player).
+func _deal_teams() -> void:
+	var ids := players.keys()
+	ids.shuffle()
+	var first := 1 if randi() % 2 == 0 else 2
+	for i in ids.size():
+		players[ids[i]]["team"] = first if i % 2 == 0 else 3 - first
+
+
+## Host only: nudge sides back to within one player of each other, e.g. after
+## someone leaves. Moves random players off the bigger side.
+func _rebalance_teams() -> void:
+	if not is_team_mode():
+		return
+	while true:
+		var sizes := _team_sizes()
+		if absi(sizes[1] - sizes[2]) <= 1:
+			return
+		var bigger := 1 if sizes[1] > sizes[2] else 2
+		var pool := []
+		for id in players:
+			if players[id].get("team", 0) == bigger:
+				pool.append(id)
+		players[pool.pick_random()]["team"] = 3 - bigger
+
+
+func _team_sizes() -> Dictionary:
 	var counts := {1: 0, 2: 0}
 	for id in players:
 		var t: int = players[id].get("team", 0)
 		if counts.has(t):
 			counts[t] += 1
-	return 1 if counts[1] <= counts[2] else 2
+	return counts
+
+
+## Host only: the side with fewer players, for late joiners (random on a tie).
+func _smaller_team() -> int:
+	var counts := _team_sizes()
+	if counts[1] == counts[2]:
+		return 1 if randi() % 2 == 0 else 2
+	return 1 if counts[1] < counts[2] else 2
 
 
 ## Starts listening for WebSocket connections on `port`. The host process
@@ -639,16 +677,6 @@ func _select_gen(key: String) -> void:
 		_broadcast_players()
 
 
-@rpc("any_peer", "call_remote", "reliable")
-func _select_team(team: int) -> void:
-	if not is_host() or match_in_progress or not is_team_mode() or team not in [1, 2]:
-		return
-	var id := multiplayer.get_remote_sender_id()
-	if players.has(id):
-		players[id]["team"] = team
-		_broadcast_players()
-
-
 @rpc("authority", "call_remote", "reliable")
 func _sync_players(roster: Dictionary, mode: String) -> void:
 	players = roster
@@ -698,6 +726,8 @@ func _on_peer_disconnected(id: int) -> void:
 		players.erase(id)
 		ready_peers.erase(id)
 		_last_heard.erase(id)
+		if not match_in_progress:
+			_rebalance_teams()
 		_broadcast_players()
 		_server_log("player %d left (%d in room)" % [id, players.size()])
 		# A dedicated server with nobody left resets itself for the next room.

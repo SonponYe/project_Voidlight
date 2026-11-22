@@ -26,7 +26,7 @@ extends Control
 @onready var ffa_button: Button = $Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow/FFAButton
 @onready var team_mode_button: Button = $Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow/TeamButton
 @onready var mode_note: Label = $Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeNote
-@onready var team_radial: RadialPicker = $Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/TeamRadial
+@onready var shuffle_button: Button = $Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ShuffleButton
 @onready var start_button: Button = $Main/RoomPanel/FooterBox/Footer/StartButton
 @onready var mic_button: Button = $Main/RoomPanel/FooterBox/Footer/MicButton
 @onready var leave_button: Button = $Main/RoomPanel/FooterBox/Footer/LeaveButton
@@ -167,22 +167,14 @@ func _build_pickers() -> void:
 	gen_radial.set_items(gens)
 	gen_radial.picked.connect(_on_gen_picked)
 
-	team_radial.hub_prefix = "Team:  "
-	team_radial.radius = 62.0
-	team_radial.set_items([
-		{"key": "1", "label": Network.team_name(1)},
-		{"key": "2", "label": Network.team_name(2)},
-	])
-	team_radial.picked.connect(_on_team_picked)
-
 
 func _on_gen_picked(key: String) -> void:
 	Network.select_gen(key)
 	_refresh_gen_buttons()
 
 
-func _on_team_picked(key: String) -> void:
-	Network.select_team(int(key))
+func _on_shuffle_pressed() -> void:
+	Network.shuffle_teams()
 
 
 func _refresh_gen_buttons() -> void:
@@ -224,7 +216,7 @@ func _refresh_room() -> void:
 		if can:
 			start_hint.text = ""
 		elif Network.is_team_mode():
-			start_hint.text = "Both teams need at least one player."
+			start_hint.text = "Team mode needs at least two players, split evenly."
 		else:
 			start_hint.text = "Waiting for another player to join..."
 	else:
@@ -281,10 +273,14 @@ func _refresh_mode_buttons() -> void:
 	var team_mode := Network.is_team_mode()
 	ffa_button.modulate = UNSELECTED_TINT if team_mode else SELECTED_TINT
 	team_mode_button.modulate = SELECTED_TINT if team_mode else UNSELECTED_TINT
-	mode_note.text = "" if leader else "Only %s can change this." % Network.player_name(Network.leader_id())
-	team_radial.visible = team_mode
-	if team_mode:
-		team_radial.set_selected(str(Network.player_team(multiplayer.get_unique_id())))
+	if not team_mode:
+		mode_note.text = "" if leader else "Only %s can change this." % Network.player_name(Network.leader_id())
+	elif leader:
+		mode_note.text = "Teams are dealt at random. Shuffle until everyone is happy."
+	else:
+		mode_note.text = "Teams are dealt at random. %s can shuffle them." % Network.player_name(Network.leader_id())
+	shuffle_button.visible = team_mode
+	shuffle_button.disabled = not leader or Network.players.size() < 2
 
 
 ## The host's private IPv4 on the local network — what a friend on the same
