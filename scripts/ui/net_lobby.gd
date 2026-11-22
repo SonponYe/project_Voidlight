@@ -16,6 +16,9 @@ extends Control
 @onready var join_panel: VBoxContainer = $Main/ConnectPanel/JoinPanel
 @onready var address_edit: LineEdit = $Main/ConnectPanel/JoinPanel/AddressEdit
 @onready var connect_button: Button = $Main/ConnectPanel/JoinPanel/JoinButtons/ConnectButton
+@onready var host_panel: VBoxContainer = $Main/ConnectPanel/HostPanel
+@onready var code_edit: LineEdit = $Main/ConnectPanel/HostPanel/CodeEdit
+@onready var create_button: Button = $Main/ConnectPanel/HostPanel/HostButtons/CreateButton
 @onready var code_card: PanelContainer = $Main/RoomPanel/CodeCard
 @onready var code_label: Label = $Main/RoomPanel/CodeCard/CodeBox/CodeLabel
 @onready var code_hint: Label = $Main/RoomPanel/CodeCard/CodeBox/CodeHint
@@ -52,7 +55,9 @@ func _ready() -> void:
 	Network.connection_failed.connect(_on_connection_failed)
 	Network.disconnected_from_server.connect(_on_disconnected)
 	Network.rejected.connect(_on_rejected)
+	Network.matchmaker.failed.connect(_on_room_failed)
 	multiplayer.connected_to_server.connect(_on_connected)
+	code_edit.text_changed.connect(_on_code_text_changed)
 
 	# Coming back from a match keeps the connection alive, so land straight
 	# in the room instead of the connect form.
@@ -71,6 +76,8 @@ func _exit_tree() -> void:
 		Network.disconnected_from_server.disconnect(_on_disconnected)
 	if Network.rejected.is_connected(_on_rejected):
 		Network.rejected.disconnect(_on_rejected)
+	if Network.matchmaker.failed.is_connected(_on_room_failed):
+		Network.matchmaker.failed.disconnect(_on_room_failed)
 	if multiplayer.connected_to_server.is_connected(_on_connected):
 		multiplayer.connected_to_server.disconnect(_on_connected)
 
@@ -80,19 +87,37 @@ func _exit_tree() -> void:
 # ---------------------------------------------------------------------------
 
 ## keep_join: stay on the code field after a failed attempt so a typo can be fixed.
-func _show_connect(message: String, keep_join := false) -> void:
+func _show_connect(message: String, keep_join := false, keep_host := false) -> void:
 	_connecting = false
 	connect_panel.visible = true
 	room_panel.visible = false
-	choices.visible = not keep_join
+	choices.visible = not keep_join and not keep_host
 	join_panel.visible = keep_join
+	host_panel.visible = keep_host
 	host_button.disabled = false
 	join_button.disabled = false
 	connect_button.disabled = false
+	create_button.disabled = false
 	status_label.text = message
 
 
 func _on_host_pressed() -> void:
+	# With a game server set up, hosting means picking a room code there.
+	if Matchmaker.is_configured():
+		status_label.text = ""
+		choices.visible = false
+		host_panel.visible = true
+		code_edit.text = Matchmaker.random_code()
+		code_edit.grab_focus()
+		return
+	_host_here()
+
+
+func _on_lan_pressed() -> void:
+	_host_here()
+
+
+func _host_here() -> void:
 	Network.set_local_name(name_edit.text)
 	var err := Network.host()
 	if err != OK:
@@ -101,11 +126,42 @@ func _on_host_pressed() -> void:
 	_show_room()
 
 
+func _on_code_text_changed(text: String) -> void:
+	var upper := text.to_upper()
+	if upper != text:
+		var at := code_edit.caret_column
+		code_edit.text = upper
+		code_edit.caret_column = at
+
+
+func _on_suggest_pressed() -> void:
+	code_edit.text = Matchmaker.random_code()
+
+
+func _on_cancel_host_pressed() -> void:
+	_show_connect("")
+
+
+func _on_create_pressed() -> void:
+	Network.set_local_name(name_edit.text)
+	var code := Matchmaker.normalize(code_edit.text)
+	if code == "":
+		_show_connect(Matchmaker.code_rules(), false, true)
+		return
+	if Network.matchmaker.request("create", code) != OK:
+		return  # a failed signal has already told the player why
+	_connecting = true
+	create_button.disabled = true
+	status_label.text = "Opening room %s..." % code
+
+
 ## "Join a game" only reveals the code field; the actual join is Connect.
 func _on_join_choice_pressed() -> void:
 	status_label.text = ""
 	choices.visible = false
 	join_panel.visible = true
+	if Matchmaker.is_configured() and address_edit.text == "127.0.0.1":
+		address_edit.text = ""
 	address_edit.grab_focus()
 	address_edit.select_all()
 
@@ -116,6 +172,17 @@ func _on_cancel_join_pressed() -> void:
 
 func _on_join_pressed() -> void:
 	Network.set_local_name(name_edit.text)
+	var room := Matchmaker.normalize(address_edit.text)
+	if room != "":
+		if not Matchmaker.is_configured():
+			_show_connect("This copy of the game has no game server to look up room codes. Use the host's address instead.", true)
+			return
+		if Network.matchmaker.request("join", room) != OK:
+			return
+		_connecting = true
+		connect_button.disabled = true
+		status_label.text = "Looking for room %s..." % room
+		return
 	var target := Network.parse_join_target(address_edit.text)
 	if target.is_empty():
 		_show_connect("That doesn't look like a room code or address. Check it and try again.", true)
@@ -130,10 +197,26 @@ func _on_join_pressed() -> void:
 
 
 func _on_connected() -> void:
+	if Network.matchmaker.active:
+		return  # only the matchmaker so far; the room connection comes next
 	_show_room()
 
 
+## The matchmaker said no (taken code, no such room, server full...).
+func _on_room_failed(reason: String, suggestion: String) -> void:
+	var hosting := host_panel.visible
+	if suggestion != "":
+		code_edit.text = suggestion
+	_show_connect(reason, not hosting, hosting)
+
+
 func _on_connection_failed() -> void:
+	if Network.matchmaker.unreachable:
+		_show_connect("Couldn't reach the game server. Check your internet, or try again in a moment.", not host_panel.visible, host_panel.visible)
+		return
+	if host_panel.visible:
+		_show_connect("Couldn't open the room. Try again.", false, true)
+		return
 	_show_connect("Couldn't reach %s. Check the code and that the host is running." % address_edit.text.strip_edges(), true)
 
 
@@ -143,7 +226,8 @@ func _on_rejected(reason: String) -> void:
 
 func _on_disconnected() -> void:
 	var reason := Network.last_reject_reason
-	_show_connect(reason if reason != "" else "Disconnected from the host.", true)
+	var hosting := host_panel.visible
+	_show_connect(reason if reason != "" else "Disconnected from the host.", not hosting, hosting)
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +285,11 @@ func _refresh_room() -> void:
 	# The room code, for a host who is also a player (a dedicated server has
 	# its own address, which players already used to get here).
 	var show_code := Network.is_host() and not Network.dedicated
-	code_card.visible = show_code
-	if show_code:
+	code_card.visible = show_code or Network.room_code != ""
+	if Network.room_code != "":
+		code_label.text = Network.room_code
+		code_hint.text = "Friends type this code under \"Join a game\""
+	elif show_code:
 		var lan := _lan_address()
 		var code := Network.format_room_code(Network.encode_room_code(lan))
 		code_label.text = code if code != "" else lan
@@ -279,6 +366,11 @@ func _refresh_mode_buttons() -> void:
 		mode_note.text = "Teams are dealt at random. Shuffle until everyone is happy."
 	else:
 		mode_note.text = "Teams are dealt at random. %s can shuffle them." % Network.player_name(Network.leader_id())
+	if team_mode:
+		for team in [1, 2]:
+			if Network.team_hp_multiplier(team) > 1.0:
+				mode_note.text += "\n%s is outnumbered, so it gets +%d%% health." % [
+					Network.team_name(team), roundi(Network.SMALL_TEAM_HP_BONUS * 100.0)]
 	shuffle_button.visible = team_mode
 	shuffle_button.disabled = not leader or Network.players.size() < 2
 

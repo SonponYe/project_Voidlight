@@ -133,7 +133,7 @@ theme_override_constants/separation = 14
 
 [node name="JoinCaption" type="Label" parent="Main/ConnectPanel/JoinPanel"]
 horizontal_alignment = 1
-text = "Type the room code the host gave you (like S4ND-AX2S), or their address."
+text = "Type the 4-character room code the host gave you."
 
 [node name="AddressEdit" type="LineEdit" parent="Main/ConnectPanel/JoinPanel"]
 custom_minimum_size = Vector2(480, 48)
@@ -159,6 +159,48 @@ text = "Connect"
 [node name="CancelJoinButton" type="Button" parent="Main/ConnectPanel/JoinPanel/JoinButtons"]
 custom_minimum_size = Vector2(140, 52)
 text = "Back"
+
+[node name="HostPanel" type="VBoxContainer" parent="Main/ConnectPanel"]
+visible = false
+theme_override_constants/separation = 14
+
+[node name="HostCaption" type="Label" parent="Main/ConnectPanel/HostPanel"]
+horizontal_alignment = 1
+text = "Pick a room code: 4 letters or digits. Friends type it to join you."
+
+[node name="CodeEdit" type="LineEdit" parent="Main/ConnectPanel/HostPanel"]
+custom_minimum_size = Vector2(240, 64)
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 34
+alignment = 1
+placeholder_text = "ABCD"
+max_length = 4
+
+[node name="HostButtons" type="HBoxContainer" parent="Main/ConnectPanel/HostPanel"]
+alignment = 1
+theme_override_constants/separation = 14
+
+[node name="CreateButton" type="Button" parent="Main/ConnectPanel/HostPanel/HostButtons"]
+custom_minimum_size = Vector2(200, 52)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("PrimaryNormal")
+theme_override_styles/hover = SubResource("PrimaryHover")
+theme_override_styles/pressed = SubResource("PrimaryPressed")
+theme_override_styles/disabled = SubResource("PrimaryDisabled")
+text = "Create room"
+
+[node name="SuggestButton" type="Button" parent="Main/ConnectPanel/HostPanel/HostButtons"]
+custom_minimum_size = Vector2(160, 52)
+text = "Suggest one"
+
+[node name="CancelHostButton" type="Button" parent="Main/ConnectPanel/HostPanel/HostButtons"]
+custom_minimum_size = Vector2(140, 52)
+text = "Back"
+
+[node name="LanButton" type="Button" parent="Main/ConnectPanel/HostPanel"]
+custom_minimum_size = Vector2(380, 36)
+size_flags_horizontal = 4
+text = "Host on this computer instead (same Wi-Fi only)"
 
 [node name="BackButton" type="Button" parent="Main/ConnectPanel"]
 custom_minimum_size = Vector2(200, 40)
@@ -302,6 +344,10 @@ horizontal_alignment = 1
 [connection signal="pressed" from="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow/FFAButton" to="." method="_on_ffa_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ModeRow/TeamButton" to="." method="_on_team_mode_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/Columns/SideColumn/ModeCard/ModeBox/ShuffleButton" to="." method="_on_shuffle_pressed"]
+[connection signal="pressed" from="Main/ConnectPanel/HostPanel/HostButtons/CreateButton" to="." method="_on_create_pressed"]
+[connection signal="pressed" from="Main/ConnectPanel/HostPanel/HostButtons/SuggestButton" to="." method="_on_suggest_pressed"]
+[connection signal="pressed" from="Main/ConnectPanel/HostPanel/HostButtons/CancelHostButton" to="." method="_on_cancel_host_pressed"]
+[connection signal="pressed" from="Main/ConnectPanel/HostPanel/LanButton" to="." method="_on_lan_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/StartButton" to="." method="_on_start_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/MicButton" to="." method="_on_mic_pressed"]
 [connection signal="pressed" from="Main/RoomPanel/FooterBox/Footer/LeaveButton" to="." method="_on_leave_pressed"]

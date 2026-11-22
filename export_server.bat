@@ -26,5 +26,5 @@ echo.
 echo Done: builds\server\
 echo Copy the file matching your server's CPU to it, then run:
 echo   chmod +x akira_server.x86_64
-echo   ./akira_server.x86_64 --headless -- --server --port=9050
+echo   ./akira_server.x86_64 --headless -- --matchmaker
 pause

@@ -1,0 +1,4 @@
+{
+	"_about": "Where the online game server is. Put its address here once it is running, like \"play.example.com:9040\" (or \"wss://play.example.com:9040\" with a certificate). While it is empty, hosting stays on the same network and rooms are joined by address.",
+	"server": ""
+}

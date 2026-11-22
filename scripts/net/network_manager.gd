@@ -29,6 +29,7 @@ signal peer_arena_ready(id: int)
 const DEFAULT_PORT := 9050
 const MAX_PLAYERS := 5
 const MAX_NAME_LENGTH := 16
+const SMALL_TEAM_HP_BONUS := 0.4  # the smaller team's players get 40% more health
 const LOBBY_SCENE := "res://scenes/ui/net_lobby.tscn"
 const ARENA_SCENE := "res://scenes/net/net_arena.tscn"
 ## What a dedicated server sits on between matches: nothing to render.
@@ -47,6 +48,15 @@ var last_reject_reason := ""
 ## True when this process is a headless server with no player of its own
 ## (--server on the command line, or a Godot dedicated-server export).
 var dedicated := false
+## Run as the matchmaker (--matchmaker): hands out room codes and starts rooms
+## instead of hosting a match itself. See matchmaker.gd.
+var matchmaker_mode := false
+## A dedicated room started by the matchmaker (--once): quits when it empties.
+var once_mode := false
+var _room_used := false
+## The 4-character code of the room we are in, "" if we joined by address.
+var room_code := ""
+var matchmaker: Matchmaker
 var _join_seq := 0
 ## Dev only: a self-signed server certificate this client should accept
 ## (--tls-trust=<file>). Real certificates (Let's Encrypt etc.) need nothing.
@@ -82,6 +92,9 @@ var _peer: MultiplayerPeer
 
 
 func _ready() -> void:
+	matchmaker = Matchmaker.new()
+	matchmaker.name = "Matchmaker"
+	add_child(matchmaker)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -91,31 +104,86 @@ func _ready() -> void:
 	for a in args:
 		if a.begins_with("--tls-trust="):
 			tls_trust_path = a.trim_prefix("--tls-trust=")
-	if OS.has_feature("dedicated_server") or "--server" in args:
+	if "--matchmaker" in args:
+		dedicated = true
+		matchmaker_mode = true
+		_boot_matchmaker.call_deferred(args)
+	elif OS.has_feature("dedicated_server") or "--server" in args:
 		dedicated = true
 		_boot_dedicated.call_deferred(args)
 
 
-func _boot_dedicated(args: PackedStringArray) -> void:
-	var port := DEFAULT_PORT
+## --tls-cert / --tls-key from the command line -> server TLS options.
+## Returns false (after reporting) if they were given but unusable.
+func _read_tls_args(args: PackedStringArray, out: Array) -> bool:
 	var cert_path := ""
 	var key_path := ""
 	for a in args:
-		if a.begins_with("--port="):
-			port = int(a.trim_prefix("--port="))
-		elif a.begins_with("--tls-cert="):
+		if a.begins_with("--tls-cert="):
 			cert_path = a.trim_prefix("--tls-cert=")
 		elif a.begins_with("--tls-key="):
 			key_path = a.trim_prefix("--tls-key=")
-	var tls: TLSOptions = null
-	if cert_path != "" or key_path != "":
-		var cert := X509Certificate.new()
-		var key := CryptoKey.new()
-		if cert_path == "" or key_path == "" or cert.load(cert_path) != OK or key.load(key_path) != OK:
-			push_error("TLS needs both --tls-cert and --tls-key, and both must be readable PEM files")
-			get_tree().quit(1)
-			return
-		tls = TLSOptions.server(key, cert)
+	if cert_path == "" and key_path == "":
+		return true
+	var cert := X509Certificate.new()
+	var key := CryptoKey.new()
+	if cert_path == "" or key_path == "" or cert.load(cert_path) != OK or key.load(key_path) != OK:
+		push_error("TLS needs both --tls-cert and --tls-key, and both must be readable PEM files")
+		get_tree().quit(1)
+		return false
+	out.append(TLSOptions.server(key, cert))
+	return true
+
+
+func _boot_matchmaker(args: PackedStringArray) -> void:
+	var port := Matchmaker.DEFAULT_PORT
+	var room_base := Matchmaker.DEFAULT_ROOM_PORT_BASE
+	var max_rooms := Matchmaker.DEFAULT_MAX_ROOMS
+	var pass_on := PackedStringArray()  # handed to every room it starts
+	for a in args:
+		if a.begins_with("--port="):
+			port = int(a.trim_prefix("--port="))
+		elif a.begins_with("--room-port-base="):
+			room_base = int(a.trim_prefix("--room-port-base="))
+		elif a.begins_with("--max-rooms="):
+			max_rooms = maxi(1, int(a.trim_prefix("--max-rooms=")))
+		elif a.begins_with("--tls-cert=") or a.begins_with("--tls-key="):
+			pass_on.append(a)
+	var tls_out := []
+	if not _read_tls_args(args, tls_out):
+		return
+	var tls: TLSOptions = tls_out[0] if not tls_out.is_empty() else null
+	var err := host(port, tls)
+	if err != OK:
+		push_error("Matchmaker could not listen on port %d (error %d)" % [port, err])
+		get_tree().quit(1)
+		return
+	matchmaker.boot_server(room_base, max_rooms, pass_on)
+	print("[matchmaker] listening on port %d; rooms on ports %d-%d (max %d), %s" % [
+		port, room_base, room_base + max_rooms - 1, max_rooms, "wss:// TLS" if tls else "plain ws://"])
+	get_tree().change_scene_to_file(IDLE_SCENE)
+
+
+func _boot_dedicated(args: PackedStringArray) -> void:
+	var port := DEFAULT_PORT
+	var idle_timeout := 0
+	for a in args:
+		if a.begins_with("--port="):
+			port = int(a.trim_prefix("--port="))
+		elif a == "--once":
+			once_mode = true
+		elif a.begins_with("--idle-timeout="):
+			idle_timeout = int(a.trim_prefix("--idle-timeout="))
+	var tls_out := []
+	if not _read_tls_args(args, tls_out):
+		return
+	var tls: TLSOptions = tls_out[0] if not tls_out.is_empty() else null
+	if once_mode and idle_timeout > 0:
+		# A room nobody ever joins shouldn't hold its code (and port) forever.
+		get_tree().create_timer(idle_timeout).timeout.connect(func():
+			if not _room_used:
+				_server_log("nobody joined, closing")
+				get_tree().quit())
 	var err := host(port, tls)
 	if err != OK:
 		push_error("Dedicated server could not listen on port %d (error %d)" % [port, err])
@@ -247,7 +315,7 @@ func set_local_name(raw: String) -> void:
 # ENCODING, not a lookup — there's no matchmaking server behind it yet, so
 # it's only as reachable as the address inside it (LAN today).
 
-const CODE_ALPHABET := "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"  # no 0/O/1/I
+const CODE_ALPHABET := Matchmaker.ALPHABET  # no 0/O/1/I
 
 
 ## Codes carry a check value so a mistyped code is rejected instead of
@@ -471,6 +539,14 @@ func _rebalance_teams() -> void:
 		players[pool.pick_random()]["team"] = 3 - bigger
 
 
+## Extra health for the outnumbered side (2 v 1, 3 v 2): 1.0 = none.
+func team_hp_multiplier(team: int) -> float:
+	if not is_team_mode() or team not in [1, 2]:
+		return 1.0
+	var sizes := _team_sizes()
+	return 1.0 + SMALL_TEAM_HP_BONUS if sizes[team] < sizes[3 - team] else 1.0
+
+
 func _team_sizes() -> Dictionary:
 	var counts := {1: 0, 2: 0}
 	for id in players:
@@ -510,6 +586,7 @@ func host(port: int = DEFAULT_PORT, tls: TLSOptions = null) -> Error:
 ## later via connected_to_server/connection_failed, not this call's return
 ## value — WebSocket handshakes aren't instant.
 func join(address: String, port: int = DEFAULT_PORT, tls: bool = false) -> Error:
+	room_code = ""
 	var peer := WebSocketMultiplayerPeer.new()
 	# A browser page served over https is not allowed to open a plain ws://
 	# connection, so there the secure form is forced.
@@ -542,7 +619,16 @@ func _client_tls_options() -> TLSOptions:
 	return TLSOptions.client()
 
 
+## Drops the connection without touching the roster or match state: used to
+## hang up on the matchmaker once it has said where the room is.
+func close_connection() -> void:
+	if has_peer():
+		multiplayer.multiplayer_peer.close()
+	_drop_peer()
+
+
 func leave() -> void:
+	room_code = ""
 	var current := multiplayer.multiplayer_peer
 	# Say goodbye first so the host can tell leaving from crashing. The
 	# short wait lets the message out before the socket closes; meanwhile
@@ -652,8 +738,9 @@ func _arena_ready() -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _register(raw_name: String, gen: String) -> void:
-	if not is_host():
+	if not is_host() or matchmaker_mode:
 		return
+	_room_used = true
 	var id := multiplayer.get_remote_sender_id()
 	_last_heard[id] = Time.get_ticks_msec()
 	var cleaned := raw_name.strip_edges().substr(0, MAX_NAME_LENGTH)
@@ -709,7 +796,7 @@ func _reject_peer(id: int, reason: String) -> void:
 # ---------------------------------------------------------------------------
 
 func _on_peer_connected(id: int) -> void:
-	if not is_host():
+	if not is_host() or matchmaker_mode:
 		return
 	_server_log("peer %d connected" % id)
 	if match_in_progress:
@@ -722,6 +809,9 @@ func _on_peer_connected(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
+	if matchmaker_mode:
+		matchmaker.forget_peer(id)
+		return
 	if is_host():
 		players.erase(id)
 		ready_peers.erase(id)
@@ -732,6 +822,10 @@ func _on_peer_disconnected(id: int) -> void:
 		_server_log("player %d left (%d in room)" % [id, players.size()])
 		# A dedicated server with nobody left resets itself for the next room.
 		if dedicated and players.is_empty():
+			if once_mode:
+				_server_log("room empty, closing")
+				get_tree().quit()
+				return
 			_reset_empty_server.call_deferred()
 
 
@@ -748,6 +842,8 @@ func _reset_empty_server() -> void:
 
 
 func _on_connected_to_server() -> void:
+	if matchmaker.active:
+		return  # this is the matchmaker connection; it asks its own question
 	_register.rpc_id(1, local_name, local_gen)
 
 

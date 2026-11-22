@@ -165,6 +165,7 @@ func _spawn_for_peer(id: int) -> void:
 	var data := {
 		"id": id, "pos": pos, "gen": Network.player_gen(id), "team": team,
 		"name": Network.player_name(id),
+		"max_hp": roundi(100.0 * Network.team_hp_multiplier(team)),
 		"look": int(Network.players.get(id, {}).get("order", 0)),
 	}
 	var node := spawner.spawn(data) as NetPlayer
@@ -189,6 +190,7 @@ func _spawn_player(data: Dictionary) -> Node:
 	player.owner_peer_id = data["id"]
 	player.gen = data["gen"]
 	player.team = data["team"]
+	player.max_hp = data["max_hp"]
 	player.display_name = data["name"]
 	player.look = data["look"]
 	player.position = data["pos"]

@@ -1,11 +1,14 @@
 # Putting Akira on a real server (Oracle Cloud, free)
 
-By the end of this, anyone can open the game, type your server's address, and
-play — without you having to host from your own PC.
+By the end of this, anyone can open the game, pick a 4-character room code (or
+type a friend's), and play — without anyone hosting from their own PC or
+forwarding a port on their router.
 
 **What you'll end up with:** a small always-on computer in Oracle's data centre
-running the Akira server as a service. It starts by itself at boot and restarts
-if it crashes.
+running the Akira **matchmaker** as a service. It starts by itself at boot and
+restarts if it crashes. The matchmaker keeps the list of room codes in use (so
+two people can never get the same code) and starts a separate room for each
+code; a room closes by itself when everyone leaves, and its code is free again.
 
 **Honest warnings first**
 - Nothing here has been run on a real Linux machine yet — the server has only run
@@ -68,10 +71,15 @@ your subnet → *Security Lists → Default Security List → Add Ingress Rules*
 
 | Source CIDR | IP Protocol | Destination port |
 |---|---|---|
-| `0.0.0.0/0` | TCP | `9050` |
+| `0.0.0.0/0` | TCP | `9040` (the matchmaker) |
+| `0.0.0.0/0` | TCP | `9100-9105` (the rooms: one port per room open at once) |
 
 (There are two firewalls: this one in Oracle's console and one on the machine
 itself. The setup script handles the second.)
+
+How many rooms can be open at once is `--max-rooms` (the setup script picks 6,
+or 3 on a machine with under 2 GB of memory; each room is a separate copy of
+the game). If you raise it, open that many more room ports in both firewalls.
 
 ### 1.4 Copy the files to the machine
 In PowerShell on your PC, from the project folder (use *your* key path and IP;
@@ -96,17 +104,25 @@ Then, on the server:
 bash setup_server.sh
 ```
 It creates an unprivileged `akira` user, installs the server and a service that
-restarts it, and opens the machine's firewall for port 9050. At the end it shows
-the service status. You want to see **`active (running)`** and a line like
-`[server] dedicated server listening on port 9050 (max 5 players, plain ws://)`.
+restarts it, and opens the machine's firewall for ports 9040 and 9100-9105. At
+the end it shows the service status. You want to see **`active (running)`** and
+a line like
+`[matchmaker] listening on port 9040; rooms on ports 9100-9105 (max 6), plain ws://`.
 
 Watch it live any time with `journalctl -u akira-server -f` (Ctrl+C to stop).
 
 ### 1.6 Play on it
-In the game: **Online → Join a game → type `SERVER_IP`** (the port 9050 is
-assumed) → Connect. You'll land in a lobby with no "host" — the **first person
-in** is the room leader and gets *Start*. Have a friend do the same from their
-own house. Play a round, then a second round from the same room.
+First tell the game where the server is. Either edit **`assets/config/online.json`**
+in the project (`"server": "SERVER_IP:9040"`) and re-export, or, just to try
+it, start the game with `--matchmaker-url=SERVER_IP:9040` (for the exe: make a
+shortcut and add that after the path).
+
+Then: **Online → Host a game** → pick a 4-character code (or press *Suggest
+one*) → *Create room*. A friend, from their own house: **Join a game** → type
+the code → Connect. The **first person in** is the room leader and gets
+*Start*. If the code is taken you're told, and offered another. Play a round,
+then a second round from the same room. When everyone has left, the code is
+free again within a second or two.
 
 If it works: **Stage 1 is done.** Tell your friends the address.
 
@@ -128,7 +144,7 @@ Any domain works. The cheapest zero-cost way is a free subdomain from
 Do **1.3 again** for TCP **443** and TCP **80** (80 is only used while getting
 the certificate). Then on the server open them on the machine too:
 ```bash
-bash setup_server.sh 9050 443 80
+bash setup_server.sh 9040 9100:9105 443 80
 ```
 (Re-running is safe; it only adds missing rules.)
 
@@ -155,21 +171,24 @@ Check renewal works any time with `sudo certbot renew --dry-run`.
 
 ### 2.5 Tell the server to use TLS
 ```bash
-echo 'AKIRA_ARGS="--port=443 --tls-cert=/etc/akira/certs/fullchain.pem --tls-key=/etc/akira/certs/privkey.pem"' | sudo tee /etc/akira/server.env
+echo 'AKIRA_ARGS="--port=443 --room-port-base=9100 --max-rooms=6 --tls-cert=/etc/akira/certs/fullchain.pem --tls-key=/etc/akira/certs/privkey.pem"' | sudo tee /etc/akira/server.env
 sudo systemctl restart akira-server
 journalctl -u akira-server -n 5 --no-pager
 ```
-You want `... listening on port 443 (max 5 players, wss:// TLS)`. If it says the
-TLS files couldn't be read, check `ls -l /etc/akira/certs`.
+You want `... listening on port 443; rooms on ports 9100-9105 (max 6), wss:// TLS`.
+If it says the TLS files couldn't be read, check `ls -l /etc/akira/certs`.
+The matchmaker hands the same certificate to every room it starts, so the room
+ports (9100-9105) must be open too (1.3, and the setup script).
 
-Players now join by typing **`wss://akira-play.duckdns.org`** (or
-`akira-play.duckdns.org:443` — port 443 implies TLS). Plain `SERVER_IP` no
-longer works against this server: it speaks only `wss://` now.
+Now set `"server": "wss://akira-play.duckdns.org"` in `assets/config/online.json`
+(or use `--matchmaker-url=wss://akira-play.duckdns.org`). Players still just
+type a 4-character code. Plain `SERVER_IP` no longer works against this server:
+it speaks only `wss://` now.
 
 ### 2.6 The browser build
 Export the **Web** preset (`export_web.bat`) and upload the folder to itch.io as
 an HTML5 game (or any `https://` host). A browser page always connects with
-`wss://`, so players type the domain. The browser will ask permission for the
+`wss://`, so the config must be the `wss://` address. The browser will ask permission for the
 **microphone** the first time voice is used. **None of the browser side has been
 tried yet** — test it with one friend before announcing it.
 
@@ -179,7 +198,7 @@ tried yet** — test it with one friend before announcing it.
 
 | I want to… | On the server |
 |---|---|
-| See who's connected / what's happening | `journalctl -u akira-server -f` |
+| See rooms opening and closing | `journalctl -u akira-server -f` (lines starting `[matchmaker]`; each room's own lines start `[server]`) |
 | Restart it | `sudo systemctl restart akira-server` |
 | Stop / start it | `sudo systemctl stop akira-server` / `start` |
 | Check it's alive after a reboot | `systemctl status akira-server` |
@@ -196,8 +215,8 @@ can't play together):
    sudo install -m 755 ~/akira_server.arm64 /opt/akira/akira_server
    sudo systemctl start akira-server
    ```
-   (Use `.x86_64` if your machine is AMD.) Restarting ends any match in
-   progress, so pick a quiet moment.
+   (Use `.x86_64` if your machine is AMD.) Restarting closes every room and ends
+   every match in progress, so pick a quiet moment.
 
 ---
 
@@ -205,7 +224,7 @@ can't play together):
 
 | Symptom | Most likely cause |
 |---|---|
-| The game says it can't connect / times out | Both firewalls: the Oracle console rule (1.3) **and** the machine's (`bash setup_server.sh` again). Test the port from your PC: `Test-NetConnection SERVER_IP -Port 9050` should say `TcpTestSucceeded : True`. |
+| "Couldn't reach the game server" / times out | Both firewalls: the Oracle console rule (1.3) **and** the machine's (`bash setup_server.sh` again). Test the port from your PC: `Test-NetConnection SERVER_IP -Port 9040` should say `TcpTestSucceeded : True`. If the matchmaker answers but a room won't open, the room ports (9100-9105) are blocked in one of the two firewalls. |
 | `connection refused` (instantly) | The service isn't running: `systemctl status akira-server`, then `journalctl -u akira-server -n 30`. |
 | `Exec format error` in the log | Wrong CPU build: ARM machine needs `.arm64`, AMD needs `.x86_64`. |
 | `Permission denied` on `scp` | Wrong key, wrong login name (try `ubuntu`, or `opc` on Oracle Linux), or the key's Windows permissions (see 1.4). |

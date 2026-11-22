@@ -1,8 +1,8 @@
 #!/bin/sh
 # Certbot runs this after it gets or renews a certificate. It hands the new
 # certificate to the Akira server (which can't read /etc/letsencrypt itself) and
-# restarts the server so it starts using it. A restart drops any match in
-# progress, which happens about every two months, so it's best to renew when
+# restarts the server so it starts using it. A restart closes every room and
+# drops any match in progress, which happens about every two months, so it's best to renew when
 # the room is empty (certbot renews roughly 30 days before expiry, at any hour).
 #
 # Install:  sudo install -m 755 renew-hook.sh /etc/letsencrypt/renewal-hooks/deploy/akira.sh

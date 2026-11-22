@@ -1,5 +1,5 @@
 [Unit]
-Description=Akira game server
+Description=Akira matchmaker (hands out room codes and runs the rooms)
 After=network-online.target
 Wants=network-online.target
 
@@ -9,9 +9,11 @@ WorkingDirectory=/opt/akira
 # Where Godot keeps its own small files (logs, cache) for this user.
 Environment=HOME=/opt/akira
 # The server's options live in /etc/akira/server.env, so changing the port or
-# turning on TLS never means editing this file:  AKIRA_ARGS="--port=9050"
+# turning on TLS never means editing this file:  AKIRA_ARGS="--port=9040 --room-port-base=9100 --max-rooms=6"
 EnvironmentFile=/etc/akira/server.env
-ExecStart=/opt/akira/akira_server --headless -- --server $AKIRA_ARGS
+ExecStart=/opt/akira/akira_server --headless -- --matchmaker $AKIRA_ARGS
+# The rooms are separate copies of the game that it starts itself; stopping this
+# service stops them too.
 # Start again by itself if it ever crashes, and at every boot.
 Restart=always
 RestartSec=3
