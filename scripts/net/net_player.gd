@@ -18,7 +18,7 @@ class_name NetPlayer
 signal died(owner_peer_id: int)
 
 enum GenState { READY, ACTIVE, COOLDOWN }
-enum GenAction { USE, USE_ALT, DETONATE }
+enum GenAction { USE, USE_ALT, DETONATE, SWAP, TAKE, REPLACE, DROP_AMMO }
 
 const COLORS := [
 	Color(0.3, 0.8, 0.5), Color(0.9, 0.4, 0.3), Color(0.35, 0.6, 1.0),
@@ -27,6 +27,14 @@ const COLORS := [
 const TEAM_COLORS := {1: Color(0.35, 0.6, 1.0), 2: Color(0.95, 0.4, 0.3)}
 const AIM_SEND_INTERVAL := 0.05
 const SHOT_DAMAGE := 20
+## One rifle round per shot, no reloading: ammo is what you carry. Pickups
+## (crates, drops, the dead) refill it.
+const START_AMMO := 30
+const MAX_AMMO := 60
+const DROP_AMMO := 10  # how much the drop key puts on the floor for a teammate
+## Keys for the actions beyond move / aim / shoot / Gen. Registered here so the
+## project's input map doesn't have to carry them.
+const EXTRA_KEYS := {"gen_swap": KEY_R, "pick_up": KEY_F, "pick_replace": KEY_V, "drop_ammo": KEY_H}
 const TRACER_LIFETIME := 0.12
 
 ## Vision rule (see net_arena.gd): enemies inside VISION_RADIUS are seen in
@@ -92,6 +100,12 @@ var camouflaged := false
 var shield_hp := 0
 var poltergeist_target := 0
 var bombs_placed := 0
+var ammo := START_AMMO
+## A second Gen, picked up from a fallen player. It keeps recharging in the
+## background; R swaps it with the active one.
+var spare_gen := ""
+var spare_state := GenState.READY
+var spare_timer := 0.0
 var net_pos := Vector2.ZERO
 var net_rot := 0.0
 ## 0 fine, 1 lagging (host hasn't heard from them lately), 2 connection lost
@@ -117,6 +131,9 @@ var _was_dead := false
 var _was_shield := 0
 var _was_camouflaged := false
 var _was_haunting := 0
+var _was_ammo := START_AMMO
+var _was_gen := ""
+var _was_spare := ""
 var _use_sprite := false
 var walk := WalkCycle.new()
 var _aim_send_timer := 0.0
@@ -137,6 +154,8 @@ var _aim_pad: Control = null
 func _ready() -> void:
 	hp = max_hp
 	_last_hp = max_hp
+	_was_gen = gen
+	_register_keys()
 	net_pos = position
 	net_rot = rotation
 	add_to_group("net_player")
@@ -171,7 +190,8 @@ func configure_replication() -> void:
 	var sync := get_node("MultiplayerSynchronizer") as MultiplayerSynchronizer
 	var config := SceneReplicationConfig.new()
 	for prop in ["net_pos", "net_rot", "link_state", "hp", "dead", "gen_state", "gen_timer",
-			"camouflaged", "shield_hp", "poltergeist_target", "bombs_placed"]:
+			"camouflaged", "shield_hp", "poltergeist_target", "bombs_placed", "ammo",
+			"spare_gen", "spare_state", "spare_timer"]:
 		var path := NodePath(".:%s" % prop)
 		config.add_property(path)
 		config.property_set_replication_mode(path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
@@ -296,6 +316,14 @@ func _play_state_sounds() -> void:
 	if shield_hp < _was_shield:
 		Sfx.play_at("shield_break" if shield_hp <= 0 else "impact", global_position)
 	if _is_mine():
+		if hp > _last_hp and _last_hp >= 0:
+			Sfx.play("heal")
+		if ammo > _was_ammo:
+			Sfx.play("pickup")
+		if spare_gen != _was_spare and _was_spare == "" or (gen != _was_gen and spare_gen == _was_spare):
+			Sfx.play("gen_pickup")  # a Gen was added, or replaced
+		elif gen != _was_gen:
+			Sfx.play("ui_click")  # swapped
 		if shield_hp > 0 and _was_shield == 0:
 			Sfx.play("shield_on")
 		if camouflaged != _was_camouflaged:
@@ -306,6 +334,9 @@ func _play_state_sounds() -> void:
 	_was_shield = shield_hp
 	_was_camouflaged = camouflaged
 	_was_haunting = poltergeist_target
+	_was_ammo = ammo
+	_was_gen = gen
+	_was_spare = spare_gen
 
 
 func _draw() -> void:
@@ -395,13 +426,16 @@ func _local_update(delta: float) -> void:
 
 	if Input.is_action_just_pressed("shoot") and _cooldown_left <= 0.0 and not camouflaged and not _hud_blocks():
 		_cooldown_left = fire_cooldown
-		if multiplayer.is_server():
+		if ammo <= 0:
+			Sfx.play("empty")  # nothing to fire: a dry click, and nothing is sent
+		elif multiplayer.is_server():
 			_server_shoot(_aim)
 		else:
 			_request_shoot.rpc_id(1, _aim)
 
 	if not _hud_blocks():
 		_gen_input(delta)
+		_misc_input()
 
 
 func _hud_blocks() -> bool:
@@ -420,6 +454,29 @@ func _gen_input(delta: float) -> void:
 			_send_gen(GenAction.DETONATE)
 	elif Input.is_action_just_pressed("use_power"):
 		_send_gen(GenAction.USE)
+
+
+## The keys for swapping Gens, taking / replacing a dropped Gen and dropping
+## ammo. Tap-only, and ignored while a menu is open.
+func _misc_input() -> void:
+	if Input.is_action_just_pressed("gen_swap"):
+		_send_gen(GenAction.SWAP)
+	if Input.is_action_just_pressed("pick_up"):
+		_send_gen(GenAction.TAKE)
+	if Input.is_action_just_pressed("pick_replace"):
+		_send_gen(GenAction.REPLACE)
+	if Input.is_action_just_pressed("drop_ammo"):
+		_send_gen(GenAction.DROP_AMMO)
+
+
+static func _register_keys() -> void:
+	for action: String in EXTRA_KEYS:
+		if InputMap.has_action(action):
+			continue
+		InputMap.add_action(action)
+		var key := InputEventKey.new()
+		key.physical_keycode = EXTRA_KEYS[action]
+		InputMap.action_add_event(action, key)
 
 
 func _send_gen(action: int) -> void:
@@ -476,11 +533,12 @@ func _request_gen(action: int) -> void:
 ## Uses the server's own idea of where this player stands, not a
 ## client-supplied origin, so a client can't shoot from somewhere it isn't.
 func _server_shoot(aim: float) -> void:
-	if dead or camouflaged:
+	if dead or camouflaged or ammo <= 0:
 		return
 	if not _is_mine() and _cooldown_left > 0.0:
 		return
 	_cooldown_left = fire_cooldown
+	ammo -= 1
 	_aim = aim
 	var from := global_position
 	var to := from + Vector2.RIGHT.rotated(aim) * shoot_range
@@ -500,6 +558,19 @@ func _server_shoot(aim: float) -> void:
 func _server_gen(action: int) -> void:
 	if dead:
 		return
+	match action:
+		GenAction.SWAP:
+			_server_swap_gens()
+			return
+		GenAction.TAKE:
+			_server_take_gen(false)
+			return
+		GenAction.REPLACE:
+			_server_take_gen(true)
+			return
+		GenAction.DROP_AMMO:
+			_server_drop_ammo()
+			return
 	var def := Gens.def(gen)
 	match gen:
 		"camouflage":
@@ -540,6 +611,71 @@ func _server_gen(action: int) -> void:
 			gen_timer = def["cooldown"]
 
 
+## R: the spare Gen becomes the active one (and the active one the spare, still
+## recharging). Not while the active Gen is running — that would be a free reset.
+func _server_swap_gens() -> void:
+	if spare_gen == "" or gen_state == GenState.ACTIVE:
+		return
+	var key := gen
+	var state := gen_state
+	var timer := gen_timer
+	gen = spare_gen
+	gen_state = spare_state
+	gen_timer = spare_timer
+	spare_gen = key
+	spare_state = state
+	spare_timer = timer
+
+
+## Take the Gen lying nearest to you. `replace` false: it becomes your SECOND Gen
+## if you have a free slot (otherwise it replaces the active one, which is left
+## on the floor in its place). `replace` true: it always replaces the active one.
+func _server_take_gen(replace: bool) -> void:
+	var drops: NetPickups = _arena().pickups
+	var pickup := drops.nearest_gen(global_position)
+	if pickup == null:
+		return
+	var key := pickup.gen_key
+	if key == gen or key == spare_gen:
+		return  # you already carry that one
+	var left_behind := ""
+	if spare_gen == "" and not replace:
+		spare_gen = key
+		spare_state = GenState.READY
+		spare_timer = 0.0
+	else:
+		left_behind = gen
+		_clear_gen_effects()
+		gen = key
+		gen_state = GenState.READY
+		gen_timer = 0.0
+	drops.take(pickup)
+	if left_behind != "":
+		drops.drop_gen(global_position + Vector2.from_angle(_aim + PI) * 40.0, left_behind)
+
+
+func _clear_gen_effects() -> void:
+	camouflaged = false
+	shield_hp = 0
+	poltergeist_target = 0
+	if gen == "blackout":
+		_arena().end_blackout(owner_peer_id)
+
+
+func _server_drop_ammo() -> void:
+	var rounds := mini(DROP_AMMO, ammo)
+	if rounds <= 0:
+		return
+	ammo -= rounds
+	_arena().pickups.drop_ammo(global_position + Vector2.from_angle(_aim) * 34.0, rounds, owner_peer_id)
+
+
+## Host only: health from a medical station.
+func server_heal(amount: int) -> void:
+	if not dead:
+		hp = mini(max_hp, hp + amount)
+
+
 func _activate_gen(def: Dictionary) -> void:
 	gen_state = GenState.ACTIVE
 	gen_timer = def["duration"]
@@ -556,6 +692,11 @@ func _end_gen() -> void:
 
 
 func _server_gen_tick(delta: float) -> void:
+	if spare_gen != "" and spare_state == GenState.COOLDOWN:
+		spare_timer -= delta
+		if spare_timer <= 0.0:
+			spare_state = GenState.READY
+			spare_timer = 0.0
 	if gen_state == GenState.READY:
 		return
 	gen_timer -= delta

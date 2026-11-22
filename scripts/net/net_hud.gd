@@ -52,6 +52,9 @@ var _hp := 0
 var _max_hp := 1
 var _hp_shown := -1.0  # the bar's own value, which eases toward the real one
 var _low_overlay: TextureRect
+var _ammo_label: Label
+var _spare_label: Label
+var _prompt_label: Label
 var _clock := 0.0
 
 
@@ -69,6 +72,7 @@ func _ready() -> void:
 	hint_label.text = ""
 	_add_volume_row()
 	_add_low_health_overlay()
+	_add_extra_labels()
 
 
 ## A "Sound" slider in the pause menu, so anyone can turn the game down without
@@ -117,6 +121,45 @@ func _add_low_health_overlay() -> void:
 	_low_overlay.modulate.a = 0.0
 	add_child(_low_overlay)
 	move_child(_low_overlay, 1)  # just above the soft vignette, below everything else
+
+
+## The ammo count, the spare-Gen line and the "what can I do here" prompt. Built
+## in code beside the labels the scene already has.
+func _add_extra_labels() -> void:
+	_ammo_label = Label.new()
+	_ammo_label.add_theme_font_size_override("font_size", 14)
+	_outline(_ammo_label)
+	var box := hp_label.get_parent().get_parent()  # StatusCard/Box
+	box.add_child(_ammo_label)
+	box.move_child(_ammo_label, hp_label.get_parent().get_index() + 1)
+	_spare_label = Label.new()
+	_spare_label.add_theme_font_size_override("font_size", 13)
+	_outline(_spare_label)
+	hint_label.get_parent().add_child(_spare_label)
+	_prompt_label = Label.new()
+	_prompt_label.add_theme_font_size_override("font_size", 16)
+	_prompt_label.add_theme_color_override("font_color", Color(1.0, 0.93, 0.62))
+	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_prompt_label.offset_left = -330.0
+	_prompt_label.offset_right = 330.0
+	_prompt_label.offset_top = -158.0
+	_prompt_label.offset_bottom = -132.0
+	_prompt_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_outline(_prompt_label)
+	add_child(_prompt_label)
+
+
+func set_ammo(me: NetPlayer) -> void:
+	if me == null:
+		_ammo_label.text = ""
+		return
+	_ammo_label.text = "Ammo  %d" % me.ammo
+	_ammo_label.add_theme_color_override("font_color", HP_BAD if me.ammo <= 5 else Color(0.92, 0.9, 0.78))
+
+
+func set_prompt(text: String) -> void:
+	_prompt_label.text = text
 
 
 ## 0 while healthy, rising from about 0.3 just under the threshold to 1 at no health.
@@ -198,8 +241,8 @@ func set_alive_text(text: String) -> void:
 	alive_label.text = text
 
 
-func update_minimap(map: NetMap, me: NetPlayer, players: Array, bombs: Array) -> void:
-	minimap.update_view(map, me, players, bombs)
+func update_minimap(map: NetMap, me: NetPlayer, players: Array, bombs: Array, pickups: Array) -> void:
+	minimap.update_view(map, me, players, bombs, pickups)
 
 
 func set_mic(text: String) -> void:
@@ -237,7 +280,9 @@ func set_gen(me: NetPlayer) -> void:
 		gen_label.text = ""
 		key_label.text = ""
 		hint_label.text = ""
+		_spare_label.text = ""
 		return
+	_spare_label.text = _spare_text(me)
 	var def := Gens.def(me.gen)
 	gen_label.text = Gens.label(me.gen)
 	detonate_button.visible = me.gen == "bomb_voyage" and DisplayServer.is_touchscreen_available()
@@ -275,6 +320,18 @@ func set_gen(me: NetPlayer) -> void:
 			hint = "Bombs  %d / %d   ·   tap Q proximity  ·  hold Q manual  ·  E detonate" % [
 				me.bombs_placed, def["max_bombs"]]
 	hint_label.text = hint
+
+
+func _spare_text(me: NetPlayer) -> String:
+	if me.spare_gen == "":
+		return ""
+	var state := "ready"
+	match me.spare_state:
+		NetPlayer.GenState.COOLDOWN:
+			state = "recharging  %ds" % ceili(me.spare_timer)
+		NetPlayer.GenState.ACTIVE:
+			state = "active"
+	return "Spare: %s  (%s)    [R] swap" % [Gens.label(me.spare_gen), state]
 
 
 # ---------------------------------------------------------------------------

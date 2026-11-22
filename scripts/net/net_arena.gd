@@ -42,6 +42,7 @@ const BLACKOUT_COLOR := Color(0.06, 0.06, 0.08)
 @onready var hud: CanvasLayer = $NetHUD
 @onready var camera: Camera2D = $Camera
 @onready var map: NetMap = $Map
+@onready var pickups: NetPickups = $Pickups
 @onready var world_modulate: CanvasModulate = $CanvasModulate
 
 ## World positions taken from the map's markers: S = free-for-all spawns,
@@ -73,6 +74,7 @@ func _ready() -> void:
 	bomb_spawner.spawn_function = _spawn_bomb
 	decoy_spawner.spawn_path = decoys_root.get_path()
 	decoy_spawner.spawn_function = _spawn_decoy
+	pickups.setup(map)
 	_build_nav()
 	hud.return_pressed.connect(_on_return_pressed)
 	hud.leave_pressed.connect(_on_leave_pressed)
@@ -103,9 +105,10 @@ func _process(_delta: float) -> void:
 	_update_hud(me)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if Network.is_host():
 		_server_check_bombs()
+		pickups.server_tick(delta, players_root.get_children())
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +142,7 @@ func _begin_match() -> void:
 		if id != 1 and Network.ready_peers.has(id):
 			_spawn_for_peer(id)
 	_is_contest = _participants.size() >= 2
+	pickups.begin_match()
 	_set_status.rpc(Story.pick("match_start", "Fight!"))
 	_check_win()
 
@@ -201,6 +205,9 @@ func _name_of(id: int) -> String:
 
 
 func _on_player_died(id: int) -> void:
+	var fallen := player_node(id)
+	if fallen:
+		pickups.drop_for_death(fallen)  # their rounds and Gen(s) stay on the ground
 	_announce.rpc(Story.pick("eliminated", "{name} was eliminated", {"name": _name_of(id)}))
 	_check_win()
 
@@ -559,12 +566,36 @@ func _update_hud(me: NetPlayer) -> void:
 	else:
 		hud.set_alive(alive, total)
 	hud.set_gen(me)
+	hud.set_ammo(me)
+	hud.set_prompt(_prompt_for(me))
 	hud.set_mic(Voice.status_text())
-	hud.update_minimap(map, me, players_root.get_children(), bombs_root.get_children())
+	hud.update_minimap(map, me, players_root.get_children(), bombs_root.get_children(), pickups.get_children())
 	if me:
 		hud.set_hp(me.hp, me.max_hp)
 		if me.dead and not _match_over:
 			hud.set_status("You were eliminated — spectating")
+
+
+## The line of help text above the Gen card: what you can do where you're standing.
+func _prompt_for(me: NetPlayer) -> String:
+	if me == null or me.dead or _match_over:
+		return ""
+	var drop := pickups.nearest_gen(me.global_position)
+	if drop != null:
+		var gen_name := Gens.label(drop.gen_key)
+		if drop.gen_key == me.gen or drop.gen_key == me.spare_gen:
+			return "%s — you already carry it" % gen_name
+		if me.spare_gen == "":
+			return "[F] take %s as a second Gen     [V] replace %s" % [gen_name, Gens.label(me.gen)]
+		return "[F] swap %s for %s" % [Gens.label(me.gen), gen_name]
+	var station := pickups.nearest_station(me.global_position)
+	if station != null and me.hp < me.max_hp:
+		if station.cooldown_left > 0.0:
+			return "Medical station recharging  %ds" % ceili(station.cooldown_left)
+		return "Healing…  stay here  %d%%" % int(station.charge * 100.0)
+	if me.ammo <= 0:
+		return "Out of ammo — find a crate, or ask a teammate to drop some (H)"
+	return ""
 
 
 func _on_lost_server() -> void:
@@ -584,6 +615,9 @@ func _on_return_pressed() -> void:
 		child.queue_free()
 	for child in decoys_root.get_children():
 		child.queue_free()
+	for child in pickups.get_children():
+		if child is NetPickup:
+			child.queue_free()
 	await get_tree().process_frame
 	await get_tree().process_frame
 	Network.return_to_lobby()

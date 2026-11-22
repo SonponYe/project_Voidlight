@@ -15,13 +15,15 @@ var _map: NetMap
 var _me: NetPlayer
 var _players: Array = []
 var _bombs: Array = []
+var _pickups: Array = []
 
 
-func update_view(map: NetMap, me: NetPlayer, players: Array, bombs: Array) -> void:
+func update_view(map: NetMap, me: NetPlayer, players: Array, bombs: Array, pickups: Array) -> void:
 	_map = map
 	_me = me
 	_players = players
 	_bombs = bombs
+	_pickups = pickups
 	queue_redraw()
 
 
@@ -49,6 +51,22 @@ func _draw() -> void:
 		draw_rect(Rect2(_to_mini(rect.position), rect.size * s), color)
 	for center in _map.barrels:
 		draw_circle(_to_mini(center), maxf(1.2, 24.0 * s), WRECK)
+
+	# Medical stations, ammo and dropped Gens: the map is known, so they always show.
+	for node in _pickups:
+		if not node is NetPickup:
+			continue
+		var at := _to_mini(node.position)
+		match node.kind:
+			"health":
+				var tint := Color(0.4, 0.95, 0.55) if node.cooldown_left <= 0.0 else Color(0.5, 0.55, 0.52)
+				draw_rect(Rect2(at - Vector2(1.2, 3.2), Vector2(2.4, 6.4)), tint)
+				draw_rect(Rect2(at - Vector2(3.2, 1.2), Vector2(6.4, 2.4)), tint)
+			"ammo":
+				draw_rect(Rect2(at - Vector2(2, 1.5), Vector2(4, 3)), Color(0.95, 0.82, 0.35))
+			"gen":
+				var tint: Color = NetPickup.GEN_COLORS.get(node.gen_key, Color.WHITE)
+				draw_colored_polygon(PackedVector2Array([at + Vector2(0, -3.5), at + Vector2(3.5, 0), at + Vector2(0, 3.5), at + Vector2(-3.5, 0)]), tint)
 
 	var spectating := _me == null or _me.dead
 	for node in _bombs:
