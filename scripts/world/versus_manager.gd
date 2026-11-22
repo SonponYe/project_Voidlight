@@ -24,7 +24,12 @@ extends Control
 var _match_over := false
 
 
+func _exit_tree() -> void:
+	Sfx.stop_ambient()
+
+
 func _ready() -> void:
+	Sfx.start_ambient()
 	# Split-screen: player 2's half renders the exact same live World2D as
 	# player 1's (same players/walls/bullets, not a duplicate), just through
 	# its own camera — this is what makes it one shared arena instead of two
@@ -95,6 +100,7 @@ func _on_player_died(loser_index: int) -> void:
 	_match_over = true
 	get_tree().paused = false
 	var winner := 2 if loser_index == 1 else 1
+	Sfx.play("win")
 	results_label.text = "PLAYER %d WINS" % winner
 	results.show()
 

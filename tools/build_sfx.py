@@ -163,9 +163,22 @@ def build():
     save("gen_pickup", mix((load("b:item_gem_03"), 0), (db(load("b:spell_01"), -3), 0.06)), -4)
     save_heartbeat("heartbeat")
     save_dread("dread")
+    # --- solo mode: monsters, and a fireplace ---
+    save("growl", lowpass(pitch(load("c:monster_12"), 0.85), 1800), -4)
+    save("stinger", mix((pitch(load("c:roar_04"), 0.9), 0), (db(load("a:slam_03"), -3), 0)), -3)
+    save("enemy_hit", load("b:creature_hurt_01"), -5)
+    save("enemy_die", mix((pitch(load("c:die_03"), 0.9), 0), (db(load("a:slam_02"), -6), 0.05)), -3)
+    save_loop("flame", lowpass(load("d:loop_ambient_01"), 3500), -12)
     # --- the world: a low wind bed that loops, and far-off thuds of artillery ---
     save_stereo_loop("ambient", "d:loop_ambient_04")
     save("rumble", fade(lowpass(pitch(load("d:thunder_01"), 0.8), 450), 0.6, 1.2), -4)
+
+
+def save_loop(name, x, peak_db):
+    """Like save(), but with no fades, so the end joins the start."""
+    x = x * (10 ** (peak_db / 20) / np.abs(x).max())
+    sf.write(os.path.join(OUT, name + ".ogg"), x, SR, format="OGG", subtype="VORBIS")
+    print("%-14s %.2fs (loops)" % (name, len(x) / SR))
 
 
 def save_heartbeat(name):

@@ -41,6 +41,12 @@ const SOUNDS := {
 	"ui_click": {"files": ["ui_click"], "db": -7.0, "jitter": 0.03},
 	"ui_confirm": {"files": ["ui_confirm"], "db": -6.0},
 	"ui_back": {"files": ["ui_back"], "db": -7.0},
+	"pickup": {"files": ["pickup"], "db": -4.0},
+	"heal": {"files": ["heal"], "db": -3.0},
+	"empty": {"files": ["empty"], "db": -4.0},
+	"gen_pickup": {"files": ["gen_pickup"], "db": -3.0},
+	"enemy_hit": {"files": ["enemy_hit"], "db": -4.0, "jitter": 0.06, "range": 800.0},
+	"enemy_die": {"files": ["enemy_die"], "db": -2.0, "jitter": 0.05, "range": 900.0},
 	"step": {"files": ["step_1", "step_2", "step_3", "step_4"], "db": -9.0, "jitter": 0.08, "range": 330.0},
 }
 
@@ -179,6 +185,21 @@ func _pick(sound: String) -> Dictionary:
 		"stream": stream, "db": def.get("db", 0.0), "range": def.get("range", 1000.0),
 		"pitch": 1.0 + randf_range(-jitter, jitter),
 	}
+
+
+## For the older scenes (solo, local versus) whose audio nodes were left without
+## a stream: gives such a node its sound, once, and leaves any stream already
+## assigned in the editor alone (so dropping your own file in still wins).
+func fill(node: Node, file: String, db := 0.0, looped := false) -> void:
+	if _silent or node == null or node.stream != null:
+		return
+	var stream := _stream(file)
+	if stream == null:
+		return
+	if looped and stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = true
+	node.stream = stream
+	node.volume_db = db
 
 
 func _stream(file: String) -> AudioStream:

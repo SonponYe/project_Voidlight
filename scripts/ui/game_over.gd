@@ -8,6 +8,7 @@ extends Control
 
 
 func _ready() -> void:
+	Sfx.play("defeat")
 	Globals.register_score(Globals.total_kills)
 	score_label.text = "Kills: %d" % Globals.total_kills
 	if music.stream:

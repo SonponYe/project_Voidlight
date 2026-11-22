@@ -49,6 +49,9 @@ var _lost_contact_timer := 0.0
 
 func _ready() -> void:
 	add_to_group("enemies")
+	Sfx.fill(footstep_audio, "step_2", -6.0)
+	Sfx.fill(growl_audio, "growl", -4.0)
+	Sfx.fill(stinger_audio, "stinger", -2.0)
 	_player = get_tree().get_first_node_in_group("player")
 	_pick_new_wander_direction()
 
@@ -250,10 +253,12 @@ func hit(damage: int = 1) -> void:
 	if _hits_taken >= max_hits:
 		_die()
 	else:
+		Sfx.play_at("enemy_hit", global_position)
 		_set_state(State.HUNT)
 
 
 func _die() -> void:
+	Sfx.play_at("enemy_die", global_position)
 	state = State.DEAD
 	velocity = Vector2.ZERO
 	set_deferred("collision_layer", 0)

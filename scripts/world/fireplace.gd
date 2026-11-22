@@ -23,6 +23,7 @@ var _burn_timer := 0.0
 
 func _ready() -> void:
 	add_to_group("landmarks")
+	Sfx.fill(flame_audio, "flame", -8.0, true)
 	body_entered.connect(_on_body_entered)
 	glow.texture = _build_radial_texture(1.0, 0.7, 0.35)
 	glow.texture_scale = light_radius / _TEX_RANGE

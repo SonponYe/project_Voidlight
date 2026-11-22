@@ -85,6 +85,13 @@ const _TEX_W := int(_TEX_RANGE * 2.0)
 const _TEX_H := 192
 
 
+## Which sound goes with which timed effect or power.
+const POWERUP_SOUNDS := {
+	"invincible": "shield_on", "camouflage": "camo_on", "blackout": "blackout_on",
+	"decoy": "decoy", "stealth": "camo_on", "damage_boost": "haunt",
+}
+
+
 func _ready() -> void:
 	add_to_group("player")
 	hp = starting_hp if starting_hp > 0 else Globals.STARTING_HP
@@ -110,6 +117,11 @@ func _ready() -> void:
 	muzzle_light.enabled = false
 	_joystick = get_tree().get_first_node_in_group(_joystick_group()) as Control
 	_aim_pad = get_tree().get_first_node_in_group(_aim_pad_group()) as Control
+	# Sounds from the shared sound set; a stream set in the editor takes priority.
+	Sfx.fill(shoot_audio, "shot_1", -3.0)
+	Sfx.fill(heartbeat_audio, "heartbeat", -6.0, true)
+	Sfx.fill(light_toggle_audio, "ui_click", -6.0)
+	Sfx.fill(wall_bump_audio, "impact_2", -5.0)
 
 
 ## Player 1 reads the plain action names (unchanged from solo mode); player 2
@@ -292,6 +304,7 @@ func _alert_nearby_idle_enemies(radius: float = 320.0) -> void:
 
 
 func add_ammo(amount: int) -> void:
+	Sfx.play("pickup")
 	ammo += amount
 	if player_index == 1:
 		Globals.ammo = ammo
@@ -299,6 +312,7 @@ func add_ammo(amount: int) -> void:
 
 
 func heal(amount: int) -> void:
+	Sfx.play("heal")
 	hp += amount
 	if player_index == 1:
 		Globals.player_hp = hp
@@ -315,7 +329,10 @@ func take_damage(amount: int = 1) -> void:
 	hp_changed.emit(hp)
 	_update_heartbeat()
 	if hp <= 0:
+		Sfx.play("death")
 		died.emit()
+	else:
+		Sfx.play("hurt_me")
 
 
 ## Generic timed powerup hook — Powerup (scripts/world/powerup.gd), or a
@@ -328,9 +345,11 @@ func take_damage(amount: int = 1) -> void:
 ## restarting it short, so overlapping pickups stack usefully.
 func apply_powerup(effect: String, duration: float, strength: float = 1.0) -> void:
 	if effect == "decoy":
+		Sfx.play("decoy")
 		_spawn_decoy()
 		return
 
+	Sfx.play(POWERUP_SOUNDS.get(effect, "pickup"))
 	var was_active := _has_effect(effect)
 	_effect_expiry[effect] = max(_effect_expiry.get(effect, 0.0), duration)
 	if was_active:

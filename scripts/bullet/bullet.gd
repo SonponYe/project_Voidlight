@@ -61,4 +61,5 @@ func _on_body_entered(body: Node) -> void:
 		body.take_damage(_damage)
 		deactivate()
 	elif body.is_in_group("walls"):
+		Sfx.play_at("impact", global_position)
 		deactivate()

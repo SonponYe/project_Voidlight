@@ -26,7 +26,12 @@ var _total_monsters := 0
 var _kills := 0
 
 
+func _exit_tree() -> void:
+	Sfx.stop_ambient()
+
+
 func _ready() -> void:
+	Sfx.start_ambient()
 	Globals.begin_level()
 	_bake_navigation()
 	_total_monsters = monsters.get_child_count()
