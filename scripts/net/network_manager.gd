@@ -58,6 +58,9 @@ var _room_used := false
 var room_code := ""
 var matchmaker: Matchmaker
 var _join_seq := 0
+## Which arena this match is played in (an ArenaCatalog id). The host picks a
+## random one each time a match starts and sends it with the scene change.
+var map_id := ArenaCatalog.DEFAULT
 ## Dev only: a self-signed server certificate this client should accept
 ## (--tls-trust=<file>). Real certificates (Let's Encrypt etc.) need nothing.
 var tls_trust_path := ""
@@ -670,13 +673,14 @@ func _request_start() -> void:
 func _do_start() -> void:
 	if not can_start():
 		return
-	_server_log("match starting with %d players (%s)" % [players.size(), match_mode])
+	map_id = ArenaCatalog.pick(map_id)
+	_server_log("match starting with %d players (%s) on %s" % [players.size(), match_mode, map_id])
 	match_in_progress = true
 	ready_peers.clear()
 	left_cleanly.clear()
 	mark_all_heard()
-	_load_scene.rpc(ARENA_SCENE)
-	_load_scene(ARENA_SCENE)
+	_load_scene.rpc(ARENA_SCENE, map_id)
+	_load_scene(ARENA_SCENE, map_id)
 
 
 ## Brings every peer back to the lobby, connection intact. Only the host can
@@ -686,11 +690,11 @@ func return_to_lobby() -> void:
 		return
 	match_in_progress = false
 	ready_peers.clear()
-	_load_scene.rpc(LOBBY_SCENE)
+	_load_scene.rpc(LOBBY_SCENE, map_id)
 	if dedicated:
 		get_tree().change_scene_to_file(IDLE_SCENE)
 	else:
-		_load_scene(LOBBY_SCENE)
+		_load_scene(LOBBY_SCENE, map_id)
 	_server_log("match over, room back in the lobby")
 
 
@@ -718,7 +722,9 @@ func report_arena_ready() -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _load_scene(path: String) -> void:
+func _load_scene(path: String, arena_id := "") -> void:
+	if arena_id != "":
+		map_id = arena_id
 	match_in_progress = path == ARENA_SCENE
 	get_tree().change_scene_to_file(path)
 

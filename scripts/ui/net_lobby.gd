@@ -371,6 +371,7 @@ func _refresh_mode_buttons() -> void:
 			if Network.team_hp_multiplier(team) > 1.0:
 				mode_note.text += "\n%s is outnumbered, so it gets +%d%% health." % [
 					Network.team_name(team), roundi(Network.SMALL_TEAM_HP_BONUS * 100.0)]
+	mode_note.text += ("\n" if mode_note.text != "" else "") + "The arena is picked at random when the match starts."
 	shuffle_button.visible = team_mode
 	shuffle_button.disabled = not leader or Network.players.size() < 2
 

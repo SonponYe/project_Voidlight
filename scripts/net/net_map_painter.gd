@@ -25,6 +25,7 @@ const SHADOW_OFFSET := Vector2(11.0, 14.0)
 var bounds := Rect2()
 var blocks: Array = []
 var barrels: Array = []
+var voids: Array = []  # darkness beyond the arena, painted over the ground
 
 var _width := 0
 var _height := 0
@@ -34,7 +35,8 @@ var _rng := RandomNumberGenerator.new()
 var _noise := FastNoiseLite.new()
 
 
-func setup(p_bounds: Rect2, p_width: int, p_height: int, p_blocks: Array, p_barrels: Array, p_decor: Dictionary, p_spawns: Dictionary) -> void:
+func setup(p_bounds: Rect2, p_width: int, p_height: int, p_blocks: Array, p_barrels: Array, p_decor: Dictionary, p_spawns: Dictionary, p_voids: Array = []) -> void:
+	voids = p_voids
 	bounds = p_bounds
 	_width = p_width
 	_height = p_height
@@ -53,6 +55,8 @@ func _draw() -> void:
 	_draw_grime()
 	_draw_decor_cells()
 	_draw_spawn_paint()
+	for rect: Rect2 in voids:
+		draw_rect(rect, OUTSIDE)
 	for block in blocks:
 		draw_rect(Rect2(block["rect"].position + SHADOW_OFFSET, block["rect"].size), SHADOW_COLOR)
 	for center in barrels:

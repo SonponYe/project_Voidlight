@@ -148,7 +148,7 @@ func _begin_match() -> void:
 			_spawn_for_peer(id)
 	_is_contest = _participants.size() >= 2
 	pickups.begin_match()
-	_set_status.rpc(Story.pick("match_start", "Fight!"))
+	_set_status.rpc("%s\n%s" % [ArenaCatalog.title(Network.map_id), Story.pick("match_start", "Fight!")])
 	_check_win()
 
 

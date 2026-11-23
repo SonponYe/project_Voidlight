@@ -8,24 +8,29 @@ class_name NetMap
 ##   v  vehicle wreck     B  barrel            .  floor
 ##   k  crater   d  rubble   x  scorch mark   (all three are floor decoration)
 ##   S  free-for-all spawn    1 / 2  team A / team B spawn   (floor)
+##   _  void: darkness beyond the arena. Solid, but with no collider of its own
+##      (walls always enclose the arena), so an arena can be any shape.
+## The grid comes from ArenaCatalog: Network.map_id says which arena this match uses.
 ## Walls, cover and wrecks are merged into the fewest rectangles; barrels are
 ## round. Each gets a collider (layer 1, what shots and line of sight test
 ## against) and a light occluder (so Blackout's glow casts real shadows).
 
 const CELL := 64.0
-const SOLID := "#cvB"
+const SOLID := "#cvB_"
 const MERGED := "#cv"
 
 const BARREL_RADIUS := 24.0
 
 # No "= []" here: an exported PackedStringArray with that initializer loses
-# its saved value in an exported build (see the Maze fix).
+# its saved value in an exported build (see the Maze fix). Left empty, the grid
+# is taken from ArenaCatalog for the match's arena; set it to force one (tools).
 @export var layout: PackedStringArray
 
 var bounds := Rect2()
 ## [{"rect": Rect2, "kind": "#" | "c" | "v"}] — also what the minimap draws.
 var blocks: Array = []
 var barrels: Array = []  # Vector2 centers
+var voids: Array = []  # Rect2s of darkness beyond the arena (painted, not collidable)
 
 var _width := 0
 var _height := 0
@@ -34,6 +39,8 @@ var _decor := {"k": [], "d": [], "x": []}
 
 
 func _ready() -> void:
+	if layout.is_empty():
+		layout = ArenaCatalog.layout(Network.map_id)
 	_height = layout.size()
 	for row in layout:
 		_width = maxi(_width, row.length())
@@ -49,6 +56,7 @@ func _ready() -> void:
 			elif c == "B":
 				barrels.append(center)
 	_merge_blocks()
+	_merge_voids()
 	for block in blocks:
 		_add_rect_body(block["rect"])
 	for center in barrels:
@@ -94,6 +102,31 @@ func _merge_blocks() -> void:
 				for dx in w:
 					used[Vector2i(x + dx, y + dy)] = true
 			blocks.append({"rect": Rect2(Vector2(x, y) * CELL, Vector2(w, h) * CELL), "kind": kind})
+
+
+## Runs of void cells as rectangles, so the painter can fill them in a few draws.
+func _merge_voids() -> void:
+	var used := {}
+	for y in _height:
+		for x in _width:
+			if _cell(x, y) != "_" or used.has(Vector2i(x, y)):
+				continue
+			var w := 1
+			while x + w < _width and _cell(x + w, y) == "_" and not used.has(Vector2i(x + w, y)):
+				w += 1
+			var h := 1
+			var grow := true
+			while grow and y + h < _height:
+				for dx in w:
+					if _cell(x + dx, y + h) != "_" or used.has(Vector2i(x + dx, y + h)):
+						grow = false
+						break
+				if grow:
+					h += 1
+			for dy in h:
+				for dx in w:
+					used[Vector2i(x + dx, y + dy)] = true
+			voids.append(Rect2(Vector2(x, y) * CELL, Vector2(w, h) * CELL))
 
 
 func _add_rect_body(rect: Rect2) -> void:
@@ -163,7 +196,7 @@ func _bake() -> void:
 		return
 	push_warning("No pre-baked map picture at %s — painting at runtime (slow). Run the bake tool: scripts/tools/bake_map.tscn" % path)
 	var painter := NetMapPainter.new()
-	painter.setup(bounds, _width, _height, blocks, barrels, _decor, _spawns)
+	painter.setup(bounds, _width, _height, blocks, barrels, _decor, _spawns, voids)
 	bake_viewport = SubViewport.new()
 	bake_viewport.size = Vector2i(bounds.size)
 	bake_viewport.transparent_bg = false
